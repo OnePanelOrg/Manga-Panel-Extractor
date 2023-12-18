@@ -10,8 +10,8 @@ from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from redis import Redis
-from rq import Queue
+# from redis import Redis
+# from rq import Queue
 
 # project
 from panel_extractor import PanelExtractor
@@ -43,7 +43,7 @@ redis_conn = Redis(
   password= os.environ.get('REDIS_PASS'),
 )
 
-q = Queue(os.environ.get('QUEUE_NAME'), connection=redis_conn)
+# q = Queue(os.environ.get('QUEUE_NAME'), connection=redis_conn)
 
 panel_extractor = PanelExtractor(keep_text=True, min_pct_panel=2, max_pct_panel=90)
 
@@ -89,11 +89,11 @@ class Data(BaseModel):
 def read_root():
     return {"Hello": "World"}
 
-@app.get('/queueSize')
-def queueSize():
-    """queueSize"""
-    logger.info("queueSize")
-    return {'Queue Size': len(q)}
+# @app.get('/queueSize')
+# def queueSize():
+#     """queueSize"""
+#     logger.info("queueSize")
+#     return {'Queue Size': len(q)}
 
 
 def wrapper(chapter_url):
