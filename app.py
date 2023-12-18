@@ -37,11 +37,11 @@ app.add_middleware(
 
 load_dotenv()
 
-redis_conn = Redis(
-  host= os.environ.get('REDIS_HOST'),
-  port= '31538',
-  password= os.environ.get('REDIS_PASS'),
-)
+# redis_conn = Redis(
+#   host= os.environ.get('REDIS_HOST'),
+#   port= '31538',
+#   password= os.environ.get('REDIS_PASS'),
+# )
 
 # q = Queue(os.environ.get('QUEUE_NAME'), connection=redis_conn)
 
