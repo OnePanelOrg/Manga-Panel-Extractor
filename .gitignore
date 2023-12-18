@@ -137,3 +137,8 @@ dmypy.json
 .vercel
 
 .DS_STORE
+
+my.log
+OnePanelLogs
+OnePanelLogs.*
+save_pid.txt
