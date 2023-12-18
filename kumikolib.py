@@ -6,8 +6,8 @@ import numpy as np
 from urllib.parse import urlparse
 from functools import reduce
 
-from lib.panel import Panel
-from lib.debug import Debug
+from kcore.panel import Panel
+from kcore.debug import Debug
 
 
 
