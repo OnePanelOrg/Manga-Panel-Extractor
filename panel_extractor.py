@@ -48,8 +48,31 @@ class PanelExtractor:
         panel_block_mask = ((labels == ind) * 255).astype("uint8")
         return panel_block_mask
 
+    def _generate_panel_blocks_adaptive(self, img):
+        img = img if len(img.shape) == 2 else img[:, :, 0]
+        blur = cv2.GaussianBlur(img, (5, 5), 0)
+
+        # Apply adaptive thresholding
+        thresh = cv2.adaptiveThreshold(
+            blur, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY, 11, 2
+        )
+
+        # Find contours
+        contours, _ = cv2.findContours(
+            thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
+        )
+
+        # Find the largest contour (panel block)
+        panel_block_contour = max(contours, key=cv2.contourArea)
+
+        # Create a mask for the panel block
+        panel_block_mask = np.zeros_like(img)
+        cv2.drawContours(panel_block_mask, [panel_block_contour], -1, 255, cv2.FILLED)
+
+        return panel_block_mask
+
     def generate_contours(self, img):
-        block_mask = self._generate_panel_blocks(img)
+        block_mask = self._generate_panel_blocks_adaptive(img)
         cv2.rectangle(
             block_mask, (0, 0), tuple(block_mask.shape[::-1]), (255, 255, 255), 10
         )
@@ -63,8 +86,6 @@ class PanelExtractor:
         for c in contours:
             area = cv2.contourArea(c)
             img_area = img.shape[0] * img.shape[1]
-            # print("img.shape[0]", img.shape[0])
-            # print("img.shape[1]", img.shape[1])
 
             # if the contour is very small or very big, it's likely wrongly detected
             if area < (self.min_panel * img_area) or area > (self.max_panel * img_area):
@@ -73,7 +94,7 @@ class PanelExtractor:
             good_contours.append(self.c2j(c, img.shape[0], img.shape[1]))
 
         # If no good contours are found, create a contour covering the entire image
-        if not good_contours:
+        if not good_contours or len(good_contours) == 1:
             x = 0
             y = 0
             w = img.shape[1]
@@ -86,41 +107,9 @@ class PanelExtractor:
                 # "path": path
                 "path": f"{x} {y}, {x+w} {y}, {x+w} {y+h}, {x} {y+h}, {x} {y}",
             }
-            good_contours.append(entire_image_contour_j)
+            good_contours = [entire_image_contour_j]
 
         return good_contours
-
-    def generate_panels(self, img):
-        block_mask = self._generate_panel_blocks(img)
-        cv2.rectangle(
-            block_mask, (0, 0), tuple(block_mask.shape[::-1]), (255, 255, 255), 10
-        )
-
-        # detect contours
-        contours, hierarchy = cv2.findContours(
-            block_mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE
-        )
-        panels = []
-
-        for i in range(len(contours)):
-            area = cv2.contourArea(contours[i])
-            img_area = img.shape[0] * img.shape[1]
-
-            # if the contour is very small or very big, it's likely wrongly detected
-            if area < (self.min_panel * img_area) or area > (self.max_panel * img_area):
-                continue
-
-            x, y, w, h = cv2.boundingRect(contours[i])
-            # create panel mask
-            panel_mask = np.ones_like(block_mask, "int32")
-            cv2.fillPoly(panel_mask, [contours[i].astype("int32")], color=(0, 0, 0))
-            panel_mask = panel_mask[y : y + h, x : x + w].copy()
-            # apply panel mask
-            panel = img[y : y + h, x : x + w].copy()
-            panel[panel_mask == 1] = 255
-            panels.append(panel)
-
-        return panels
 
     def c2j(self, c, img_H, img_W):
         x, y, w, h = cv2.boundingRect(c)
@@ -146,13 +135,8 @@ class PanelExtractor:
         for i in tqdm(sorted(image_list), desc="extracting panels"):
             img = load_image(i)
 
-            # panels = self.generate_panels(img)
-            # print(f"{i} have {len(panels)} panels")
-            # name, ext = splitext(basename(i))
-            # for j, panel in enumerate(panels):
-            #     cv2.imwrite(join(folder, f"{name}_{j}.{ext}"), panel)
-
             contours = self.generate_contours(img)
+            print(basename(i), len(contours))
             pages.append(
                 {
                     "page_index": i,

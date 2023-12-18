@@ -10,6 +10,7 @@ from bs4 import BeautifulSoup
 from skimage import io
 
 def name_requirements(src):
+    # Apparently this is working only for onepiece
     name_code = src.split('.png')[0].split('/')[-1].split('_')[-1]
     return src.startswith("https://cdn.onepiecechapters.com/file/CDN-M-A-N/") and src.endswith(".png") and len(name_code)==3     
 
@@ -35,6 +36,8 @@ def download_lmages(url, folder):
         img_path = os.path.join(folder, img_name)
         with open(img_path, "wb") as f:
             f.write(img_data)
+
+    return len(img_urls)
 
     print("All images downloaded successfully!")
 

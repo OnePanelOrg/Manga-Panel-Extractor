@@ -1,5 +1,6 @@
 import logging
-import os
+import os, json
+
 from logging.handlers import TimedRotatingFileHandler
 from time import time
 from typing import Union
@@ -14,7 +15,7 @@ from rq import Queue
 
 # project
 from panel_extractor import PanelExtractor
-from utils import download_lmages
+from utils import download_lmages, save_file
 
 app = FastAPI()
 
@@ -45,6 +46,15 @@ redis_conn = Redis(
 q = Queue(os.environ.get('QUEUE_NAME'), connection=redis_conn)
 
 panel_extractor = PanelExtractor(keep_text=True, min_pct_panel=2, max_pct_panel=90)
+
+from kumikolib import Kumiko
+
+k = Kumiko({
+	'debug': False,
+	'progress': False,
+	'rtl': True,
+	'min_panel_size_ratio': False
+})
 
 # create logger
 logger = logging.getLogger(__name__)
@@ -91,13 +101,30 @@ def wrapper(chapter_url):
     logger.info(f"request_id: {request_id}")
 
     _path = f"./images/{request_id}"
-    download_lmages(chapter_url, _path)
-    logger.info("images downloaded")
+    total = download_lmages(chapter_url, _path)
+
+    # _path = f"./images/345bb755-1a8e-47f3-bce7-e450cfcc89a0"
+
+    logger.info(f"{total} images downloaded")
 
     panels_extracted = panel_extractor.extract(_path)
+    info = k.parse_dir(_path)
+  
+    # checking if the directory demo_folder  
+    # exist or not. 
+    foldername = f"./jsons/{request_id}"
+    if not os.path.exists(foldername): 
+        
+        # if the demo_folder directory is not present  
+        # then create it. 
+        os.makedirs(foldername) 
+
+    save_file(panels_extracted, f'{foldername}/panel_extracted.json')
+    save_file(info, f'{foldername}/kumiko.json')
+
     logger.info("panels extracted")
     
-    return panels_extracted
+    return info
 
 @app.post("/chapter")
 async def post_chapter(data: Data):
