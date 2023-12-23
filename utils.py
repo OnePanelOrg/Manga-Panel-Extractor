@@ -26,8 +26,11 @@ def download_lmages(url, folder):
     img_urls = [img['src'] for img in img_tags if name_requirements(img['src'])]
 
     # Create the folder if not exist
-    if not os.path.exists(folder):
-        os.makedirs(folder)
+    if os.path.exists(folder):   
+        print("images already downloaded")
+        return 0
+
+    os.makedirs(folder)
 
     # Download each image
     for img_url in img_urls:
