@@ -63,7 +63,15 @@ class Kumiko:
 		filenames = []
 		for filename in os.scandir(directory):
 			filenames.append(filename.path)
-		return self.parse_images(filenames,urls)
+		pages = self.parse_images(filenames,urls)
+		return_obj = {
+			"title": "",
+			"author": [],
+			"tags": [],
+			"pageCount": 18,
+			"pages": pages,
+		}
+		return return_obj
 	
 	
 	def parse_images(self,filenames=[],urls=None):
@@ -281,11 +289,13 @@ class Kumiko:
 		
 		size = list(self.img.shape[:2])
 		size.reverse()  # get a [width,height] list
+
+		actual_image_name = filename.split('/')[-1]
 		
 		infos = {
 			'filename': url if url else os.path.basename(filename),
 			'size': size,
-			'image': f"https://cdn.onepiecechapters.com/file/CDN-M-A-N/{filename}"
+			'image': f"https://cdn.onepiecechapters.com/file/CDN-M-A-N/{actual_image_name}"
 		}
 		Panel.img_size = size
 		Panel.small_panel_ratio = self.options['min_panel_size_ratio']
