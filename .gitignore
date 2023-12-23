@@ -142,3 +142,4 @@ my.log
 OnePanelLogs
 OnePanelLogs.*
 save_pid.txt
+jsons/*
