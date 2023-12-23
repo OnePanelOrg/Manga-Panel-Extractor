@@ -1,5 +1,6 @@
 import logging
 import os, json
+import hashlib
 
 from logging.handlers import TimedRotatingFileHandler
 from time import time
@@ -98,9 +99,15 @@ def read_root():
 
 def wrapper(chapter_url):
     request_id = uuid4()
-    logger.info(f"request_id: {request_id}")
+    # strip date at end of url
+    chapter_url = chapter_url.split('?')[0]
 
-    _path = f"./images/{request_id}"
+    # Encode the string to bytes
+    chapter_url_encoded = chapter_url.encode()
+    chapter_hash = hashlib.md5(chapter_url_encoded).hexdigest()
+    logger.info(f"request_id: {request_id}, chapter hash {chapter_hash}")
+
+    _path = f"./images/{chapter_hash}"
     total = download_lmages(chapter_url, _path)
 
     # _path = f"./images/345bb755-1a8e-47f3-bce7-e450cfcc89a0"
@@ -112,7 +119,7 @@ def wrapper(chapter_url):
   
     # checking if the directory demo_folder  
     # exist or not. 
-    foldername = f"./jsons/{request_id}"
+    foldername = f"./jsons/{chapter_hash}"
     if not os.path.exists(foldername): 
         
         # if the demo_folder directory is not present  
