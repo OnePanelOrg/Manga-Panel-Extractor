@@ -44,12 +44,17 @@ class Panel:
 		return [self.x, self.y, self.w, self.h]
 
 	def to_xywh_path(self):
+		img_W, img_H = self.img_size
+		x = self.x / img_W * 100
+		y = self.y / img_H * 100
+		w = self.w / img_W * 100
+		h = self.h / img_H * 100
 		return {
-			"x":self.x,
-			"y":self.y,
-			"w":self.w,
-			"h":self.h,
-			"path": f"{self.x} {self.y}, {self.x+self.w} {self.y}, {self.x+self.w} {self.y+self.h}, {self.x} {self.y+self.h}, {self.x} {self.y}",
+			"x":x,
+			"y":y,
+			"w":w,
+			"h":h,
+			"path": f"{x} {y}, {x+w} {y}, {x+w} {y+h}, {x} {y+h}, {x} {y}",
 			}
 	
 	def __eq__(self, other):
