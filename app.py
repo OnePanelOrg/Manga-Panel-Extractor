@@ -27,7 +27,10 @@ origins = [
     "https://one-panel-next.vercel.app",
     "https://one-panel-next.vercel.app/",
     "https://one-panel-next.vercel.app/canvas",
-    "https://one-panel-next.vercel.app/*"
+    "https://one-panel-next.vercel.app/*",
+    "https://reader.onepanel.app",
+    "https://reader.onepanel.app/",
+    "https://reader.onepanel.app/*"
 ]
 
 app.add_middleware(
