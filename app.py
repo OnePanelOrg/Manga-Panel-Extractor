@@ -22,6 +22,8 @@ app = FastAPI()
 
 origins = [
     "http://localhost:3000",
+    "http://localhost:3000/",
+    "http://localhost:3000/*",
     "https://one-panel-next.vercel.app",
     "https://one-panel-next.vercel.app/",
     "https://one-panel-next.vercel.app/canvas",
