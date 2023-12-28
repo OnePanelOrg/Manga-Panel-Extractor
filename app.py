@@ -107,6 +107,10 @@ def wrapper(chapter_url):
     chapter_hash = hashlib.md5(chapter_url_encoded).hexdigest()
     logger.info(f"request_id: {request_id}, chapter hash {chapter_hash}")
 
+    if os.path.exists(f"./jsons/{chapter_hash}/kumiko.json"):
+        logger.info("already processed")
+        return json.load(open(f"./jsons/{chapter_hash}/kumiko.json"))
+
     _path = f"./images/{chapter_hash}"
     total = download_lmages(chapter_url, _path)
 
@@ -137,14 +141,6 @@ def wrapper(chapter_url):
 async def post_chapter(data: Data):
     logger.info("New Request")
     chapter_url = data.chapter_url
-
-    # TODO: this needs!!!! to be fixed
-    # we do not need to dowload all the images for the same chapter several times
-    # and to be honest we don't need to calc the panels each time
-    # a lot of caching needs to be done :)
-    # _path = f"./images/{uuid4()}"
-
-    # download_lmages(chapter_url, _path)
 
     # potentially we want the shell script to generate a uuid each time, save the result in a folder named as the uuid
     # and return the uuid as output, and use the autput uuid as input for the method extract
