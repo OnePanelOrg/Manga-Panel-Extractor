@@ -198,10 +198,17 @@ async def post_chapter(data: Data):
     result = wrapper(chapter_url)
     return result
 
-@app.get("/chapter/{chapter_hash}")
+@app.post("/v2/chapter")
+async def post_chapter_v2(chapter_url: str):
+    logger.info("New Request V2")
+
+    result = wrapper2(chapter_url)
+
+    return result
+
+@app.get("/v2/chapter/{chapter_hash}")
 async def get_chapter(chapter_hash: str):
     logger.info("New Get Request, chapter hash", chapter_hash)
-    print(chapter_hash)
 
     result = json.load(open(f"./jsons/{chapter_hash}/kumiko.json"))
 
