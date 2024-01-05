@@ -208,7 +208,7 @@ async def post_chapter_v2(chapter_url: str):
 
 @app.get("/v2/chapter/{chapter_hash}")
 async def get_chapter(chapter_hash: str):
-    logger.info("New Get Request, chapter hash", chapter_hash)
+    logger.info(f"New Get Request, chapter hash: {chapter_hash}")
 
     result = json.load(open(f"./jsons/{chapter_hash}/kumiko.json"))
 
