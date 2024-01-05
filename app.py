@@ -142,6 +142,47 @@ def wrapper(chapter_url):
     
     return info
 
+def wrapper(chapter_url):
+    request_id = uuid4()
+    # strip date at end of url
+    chapter_url = chapter_url.split('?')[0]
+
+    # Encode the string to bytes
+    chapter_url_encoded = chapter_url.encode()
+    chapter_hash = hashlib.md5(chapter_url_encoded).hexdigest()
+    logger.info(f"request_id: {request_id}, chapter hash {chapter_hash}")
+
+    if os.path.exists(f"./jsons/{chapter_hash}/kumiko.json"):
+        logger.info("already processed")
+        return {"chapter_hash":chapter_hash}
+        # return json.load(open(f"./jsons/{chapter_hash}/kumiko.json"))
+
+    _path = f"./images/{chapter_hash}"
+    total = download_lmages(chapter_url, _path)
+
+    # _path = f"./images/345bb755-1a8e-47f3-bce7-e450cfcc89a0"
+
+    logger.info(f"{total} images downloaded")
+
+    panels_extracted = panel_extractor.extract(_path)
+    info = k.parse_dir(_path)
+  
+    # checking if the directory demo_folder  
+    # exist or not. 
+    foldername = f"./jsons/{chapter_hash}"
+    if not os.path.exists(foldername): 
+        
+        # if the demo_folder directory is not present  
+        # then create it. 
+        os.makedirs(foldername) 
+
+    save_file(panels_extracted, f'{foldername}/panel_extracted.json')
+    save_file(info, f'{foldername}/kumiko.json')
+
+    logger.info("panels extracted")
+    
+    return {"chapter_hash":chapter_hash}
+
 @app.post("/chapter")
 async def post_chapter(data: Data):
     logger.info("New Request")
@@ -156,6 +197,15 @@ async def post_chapter(data: Data):
     # return {'size': size}
     result = wrapper(chapter_url)
     return result
+
+@app.get("/chapter/{chapter_hash}")
+async def get_chapter(chapter_hash: str):
+    logger.info("New Get Request, chapter hash", chapter_hash)
+    print(chapter_hash)
+
+    result = json.load(open(f"./jsons/{chapter_hash}/kumiko.json"))
+
+    return result   
 
 # @app.get("/result/{job_id}")
 # def result(job_id):
