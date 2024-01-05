@@ -142,7 +142,7 @@ def wrapper(chapter_url):
     
     return info
 
-def wrapper(chapter_url):
+def wrapper2(chapter_url):
     request_id = uuid4()
     # strip date at end of url
     chapter_url = chapter_url.split('?')[0]
