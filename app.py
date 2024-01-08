@@ -8,7 +8,7 @@ from typing import Union
 from uuid import uuid4
 
 from dotenv import load_dotenv
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 # from redis import Redis
@@ -210,9 +210,18 @@ async def post_chapter_v2(data: Data):
 async def get_chapter(chapter_hash: str):
     logger.info(f"New Get Request, chapter hash: {chapter_hash}")
 
+    # list folder names in ./jsons
+    folders = os.listdir('./jsons')
+
+    if chapter_hash not in folders:
+        raise HTTPException(
+            status_code=404,
+            detail="Item not found",
+        )
+
     result = json.load(open(f"./jsons/{chapter_hash}/kumiko.json"))
 
-    return result   
+    return result
 
 # @app.get("/result/{job_id}")
 # def result(job_id):
