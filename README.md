@@ -1,4 +1,5 @@
 # Manga-Panel-Extractor
+
 A python implementation of a Manga Panel Extractor and a dialogue bubble text eraser. (But we don't really care that much about text eraser so we might as well decide to get rid of this)
 
 The text erasor is based on the CRAFT text detector. See [here](https://github.com/clovaai/CRAFT-pytorch) for more information.
@@ -8,12 +9,15 @@ The text erasor is based on the CRAFT text detector. See [here](https://github.c
 This service runs on python >= 3.6, use pip to install dependencies:
 
 Optionally use a virtual environment
+
 ```
 python3 -m venv venv
 
 source venv/bin/activate
 ```
+
 Then
+
 ```
 pip3 install -r requirements.txt
 ```
@@ -23,30 +27,37 @@ pip3 install -r requirements.txt
 The project can be used in 2 ways. Via command line or via API
 
 ### API
+
 To run the API you have to run
+
 ```
-uvicorn app:app --reload  
+uvicorn app:app --reload
 ```
-and then you can find the resource at 
+
+and then you can find the resource at
+
 ```
 localhost:8000/chapter
 ```
 
 ### CLI
 
-Use the `get_images.sh` script to get all the images to be processed. 
+Use the `get_images.sh` script to get all the images to be processed.
 
 Give it executable permissions
+
 ```
 sudo chmod +x get_images.sh
 ```
 
 Then simply run
+
 ```
 ./get_images.sh
 ```
 
 Use the `main.py` script to extract panels from manga pages provided in `folder`.
+
 ```
 usage: main.py [-h] [-kt] [-minp [1-99]] [-maxp [1-99]] [-f TEST_FOLDER]
 
@@ -66,6 +77,7 @@ optional arguments:
 ```
 
 Example
+
 ```
 python main.py -kt -jc -f ./images/
 ```
@@ -76,6 +88,20 @@ tail -f my.log
 
 kill -9 `cat save_pid.txt`
 rm save_pid.txt
+
+## Utils
+
+list proecess using port `8000`
+
+```
+lsof -i :8000
+```
+
+kill process using port `8000`
+
+```
+lsof -i :8000 -t | xargs kill -9
+```
 
 ### Issues
 

@@ -199,10 +199,10 @@ async def post_chapter(data: Data):
     return result
 
 @app.post("/v2/chapter")
-async def post_chapter_v2(chapter_url: str):
+async def post_chapter_v2(data: Data):
     logger.info("New Request V2")
 
-    result = wrapper2(chapter_url)
+    result = wrapper2(data.chapter_url)
 
     return result
 
