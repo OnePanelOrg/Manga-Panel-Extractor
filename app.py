@@ -17,6 +17,7 @@ from pydantic import BaseModel
 # project
 from panel_extractor import PanelExtractor
 from utils import download_lmages, save_file
+from feedback_service import save_feedback
 
 app = FastAPI()
 
@@ -222,6 +223,13 @@ async def get_chapter(chapter_hash: str):
     result = json.load(open(f"./jsons/{chapter_hash}/kumiko.json"))
 
     return result
+
+@app.post("/v2/feedback")
+def post_feedback(data: dict):
+    logger.info("New Feedback")
+    logger.info(data)
+    save_feedback(data['chapter_hash'], data['rating'], data['comment'])
+    return {'status': 'success'}
 
 # @app.get("/result/{job_id}")
 # def result(job_id):
