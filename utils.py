@@ -11,8 +11,8 @@ from skimage import io
 
 def name_requirements(src):
     # Apparently this is working only for onepiece
-    name_code = src.split('.png')[0].split('/')[-1].split('_')[-1]
-    return src.startswith("https://cdn.onepiecechapters.com/file/CDN-M-A-N/") and src.endswith(".png") and len(name_code)==3     
+    # name_code = src.split('.png')[0].split('/')[-1].split('_')[-1]
+    return src.startswith("https://i") and src.endswith(".png")
 
 def download_lmages(url, folder):
     # Send a GET request to the URL
@@ -22,7 +22,7 @@ def download_lmages(url, folder):
     soup = BeautifulSoup(response.content, "html.parser")
     
     # Find all the unage tags and extract the image URLS
-    img_tags = soup.find_all("img", {"class": "fixed-ratio-content"})
+    img_tags = soup.find_all("img")
     img_urls = [img['src'] for img in img_tags if name_requirements(img['src'])]
 
     # Create the folder if not exist
