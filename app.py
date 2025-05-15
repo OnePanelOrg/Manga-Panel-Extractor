@@ -29,6 +29,12 @@ origins = [
     "https://one-panel-next.vercel.app/",
     "https://one-panel-next.vercel.app/canvas",
     "https://one-panel-next.vercel.app/*",
+    "https://one-panel-next-git-*-onepanel.vercel.app",
+    "https://one-panel-next-git-*-onepanel.vercel.app/",
+    "https://one-panel-next-git-*-onepanel.vercel.app/*",
+    "https://one-panel-next-*-onepanel.vercel.app",
+    "https://one-panel-next-*-onepanel.vercel.app/",
+    "https://one-panel-next-*-onepanel.vercel.app/*",
     "https://reader.onepanel.app",
     "https://reader.onepanel.app/",
     "https://reader.onepanel.app/*"
