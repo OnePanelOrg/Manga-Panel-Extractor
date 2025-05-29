@@ -140,7 +140,7 @@ class PanelExtractor:
             pages.append(
                 {
                     "page_index": i,
-                    "image": f"https://cdn.onepiecechapters.com/file/CDN-M-A-N/{basename(i)}",
+                    "image": f"https://i3.wp.com/opchapters.com/wp-content/uploads/2025/05/{basename(i)}",
                     "panels": sorted(contours, key=lambda p: p["y"]),
                 }
             )
