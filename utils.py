@@ -32,17 +32,21 @@ def download_lmages(url, folder):
 
     os.makedirs(folder)
 
+    img_dict = {}
+
     # Download each image
     for img_url in img_urls:
         img_name = os.path.basename(img_url)
+        img_dict[img_name] = img_url
         img_data = requests.get(img_url).content
         img_path = os.path.join(folder, img_name)
         with open(img_path, "wb") as f:
             f.write(img_data)
 
-    return len(img_urls)
+    img_dict_path = os.path.join(folder, "img_dict.json")
+    save_file(img_dict, img_dict_path)
 
-    print("All images downloaded successfully!")
+    return len(img_urls)
 
 
 

@@ -131,16 +131,24 @@ class PanelExtractor:
         image_list, _, _ = get_files(folder)
         print("Done!")
 
+        import json
+        import os
+
+        img_dict_path = os.path.join(folder, "img_dict.json")
+        with open(img_dict_path, "r") as f:
+            img_dict = json.load(f)
+
         pages = []
         for i in tqdm(sorted(image_list), desc="extracting panels"):
             img = load_image(i)
 
             contours = self.generate_contours(img)
             print(basename(i), len(contours))
+            print(img_dict[basename(i)])
             pages.append(
                 {
                     "page_index": i,
-                    "image": f"https://i3.wp.com/opchapters.com/wp-content/uploads/2025/05/{basename(i)}",
+                    "image": img_dict[basename(i)],
                     "panels": sorted(contours, key=lambda p: p["y"]),
                 }
             )

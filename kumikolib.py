@@ -3,6 +3,8 @@
 import os, json, sys, tempfile, requests
 import cv2 as cv
 import numpy as np
+import json
+import os
 from urllib.parse import urlparse
 from functools import reduce
 
@@ -63,7 +65,12 @@ class Kumiko:
 		filenames = []
 		for filename in os.scandir(directory):
 			filenames.append(filename.path)
-		pages = self.parse_images(filenames,urls)
+
+		img_dict_path = os.path.join(directory, "img_dict.json")
+		with open(img_dict_path, "r") as f:
+			img_dict = json.load(f)
+
+		pages = self.parse_images(filenames,img_dict)
 		return_obj = {
 			"title": "",
 			"author": [],
@@ -74,7 +81,7 @@ class Kumiko:
 		return return_obj
 	
 	
-	def parse_images(self,filenames=[],urls=None):
+	def parse_images(self,filenames=[],img_dict=None):
 		infos = []
 		
 		if self.options['progress']:
@@ -83,11 +90,11 @@ class Kumiko:
 		i = -1
 		for filename in sorted(filenames):
 			i += 1
-			if self.options['progress']:
-				print("\t",urls[i] if urls else filename)
+			# if self.options['progress']:
+			# 	print("\t",urls[i] if urls else filename)
 			
 			try:
-				infos.append(self.parse_image(filename,url=urls[i] if urls else None))
+				infos.append(self.parse_image(filename,img_dict))
 			except NotAnImageException:
 				print("Not an image, will be ignored: {}".format(filename), file=sys.stderr) 
 				pass  # this file is not an image, will not be part of the results
@@ -279,7 +286,7 @@ class Kumiko:
 		self.dbg.add_step('Expand panels', panels)
 	
 	
-	def parse_image(self,filename,url=None):
+	def parse_image(self,filename,img_dict):
 		self.img = cv.imread(filename)
 		if not isinstance(self.img,np.ndarray) or self.img.size == 0:
 			raise NotAnImageException('File {} is not an image'.format(filename))
@@ -293,9 +300,9 @@ class Kumiko:
 		actual_image_name = filename.split('/')[-1]
 		
 		infos = {
-			'filename': url if url else os.path.basename(filename),
+			'filename': os.path.basename(filename),
 			'size': size,
-			'image': f"https://cdn.onepiecechapters.com/file/CDN-M-A-N/{actual_image_name}"
+			'image': img_dict[actual_image_name], # f"https://cdn.onepiecechapters.com/file/CDN-M-A-N/{actual_image_name}"
 		}
 		Panel.img_size = size
 		Panel.small_panel_ratio = self.options['min_panel_size_ratio']
@@ -313,14 +320,14 @@ class Kumiko:
 		self.dbg.add_image(self.gray,'Shades of gray')
 		
 		for bgcol in ['white','black']:
-			res = self.parse_image_with_bgcol(infos.copy(),filename,bgcol,url)
+			res = self.parse_image_with_bgcol(infos.copy(),filename,bgcol)
 			if len(res['panels']) > 1:
 				return res
 		
 		return res
 	
 	
-	def parse_image_with_bgcol(self,infos,filename,bgcol,url=None):
+	def parse_image_with_bgcol(self,infos,filename,bgcol):
 		
 		contours = self.get_contours(self.gray,filename,bgcol)
 		infos['background'] = bgcol
