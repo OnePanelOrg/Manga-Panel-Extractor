@@ -75,7 +75,7 @@ class Kumiko:
 			"title": "",
 			"author": [],
 			"tags": [],
-			"pageCount": 18,
+			"pageCount": len(pages),
 			"pages": pages,
 		}
 		return return_obj

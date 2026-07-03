@@ -1,15 +1,36 @@
-from utils import download_lmages
 import os
+import tempfile
+import unittest
 
-# chapter_url = "https://tcbscans.com/chapters/7336/spy-x-family-chapter-78-review-1687770183?date=9-12-2023-12"
-chapter_url = "https://opchapters.com/op-chapter-1148/"
-request_id = "test"
-_path = f"./images/{request_id}"
-import shutil
+from utils import list_files, name_requirements
 
-if os.path.exists(_path):
-    shutil.rmtree(_path)
 
-total = download_lmages(chapter_url, _path)
+class ImageSourceTests(unittest.TestCase):
+    def test_accepts_supported_op_chapters_images(self):
+        self.assertTrue(name_requirements("https://i.example/chapter/page.png"))
+        self.assertTrue(name_requirements("https://i.example/chapter/page.webp"))
+        self.assertTrue(
+            name_requirements("https://i.example/chapter/PAGE.WEBP?width=1200")
+        )
 
-print(total)
+    def test_rejects_unsupported_sources(self):
+        self.assertFalse(name_requirements(None))
+        self.assertFalse(name_requirements("/chapter/page.webp"))
+        self.assertFalse(name_requirements("https://cdn.example/chapter/page.webp"))
+        self.assertFalse(name_requirements("https://i.example/chapter/page.jpg"))
+
+    def test_scanner_includes_webp(self):
+        with tempfile.TemporaryDirectory() as directory:
+            webp_path = os.path.join(directory, "page.webp")
+            text_path = os.path.join(directory, "notes.txt")
+            open(webp_path, "wb").close()
+            open(text_path, "w").close()
+
+            images, _, text_files = list_files(directory)
+
+            self.assertEqual(images, [webp_path])
+            self.assertEqual(text_files, [text_path])
+
+
+if __name__ == "__main__":
+    unittest.main()

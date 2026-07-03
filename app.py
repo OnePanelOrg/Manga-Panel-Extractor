@@ -13,11 +13,8 @@ from fastapi import FastAPI, HTTPException
 from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-# from redis import Redis
-# from rq import Queue
 
 # project
-from panel_extractor import PanelExtractor
 from utils import download_lmages, save_file
 from feedback_service import save_feedback
 
@@ -60,16 +57,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-# redis_conn = Redis(
-#   host= os.environ.get('REDIS_HOST'),
-#   port= '31538',
-#   password= os.environ.get('REDIS_PASS'),
-# )
-
-# q = Queue(os.environ.get('QUEUE_NAME'), connection=redis_conn)
-
-panel_extractor = PanelExtractor(keep_text=True, min_pct_panel=2, max_pct_panel=90)
 
 from kumikolib import Kumiko
 
@@ -131,13 +118,6 @@ def read_root():
 def health():
     return {"status": "ok"}
 
-# @app.get('/queueSize')
-# def queueSize():
-#     """queueSize"""
-#     logger.info("queueSize")
-#     return {'Queue Size': len(q)}
-
-
 def wrapper(chapter_url):
     request_id = uuid4()
     # strip date at end of url
@@ -161,15 +141,18 @@ def wrapper(chapter_url):
 
     logger.info(f"{total} images downloaded")
 
-    panels_extracted = panel_extractor.extract(str(image_path))
     info = k.parse_dir(str(image_path))
+    if not info["pages"]:
+        raise HTTPException(
+            status_code=422,
+            detail="No supported chapter images were found; result was not cached",
+        )
   
     # checking if the directory demo_folder  
     # exist or not. 
     foldername = JSONS_DIR / chapter_hash
     foldername.mkdir(parents=True, exist_ok=True)
 
-    save_file(panels_extracted, str(foldername / "panel_extracted.json"))
     save_file(info, str(foldername / "kumiko.json"))
 
     logger.info("panels extracted")
@@ -199,15 +182,18 @@ def wrapper2(chapter_url):
 
     logger.info(f"{total} images downloaded")
 
-    panels_extracted = panel_extractor.extract(str(image_path))
     info = k.parse_dir(str(image_path))
+    if not info["pages"]:
+        raise HTTPException(
+            status_code=422,
+            detail="No supported chapter images were found; result was not cached",
+        )
   
     # checking if the directory demo_folder  
     # exist or not. 
     foldername = JSONS_DIR / chapter_hash
     foldername.mkdir(parents=True, exist_ok=True)
 
-    save_file(panels_extracted, str(foldername / "panel_extracted.json"))
     save_file(info, str(foldername / "kumiko.json"))
 
     logger.info("panels extracted")
@@ -219,13 +205,6 @@ async def post_chapter(data: Data):
     logger.info("New Request")
     chapter_url = validate_chapter_url(data.chapter_url)
 
-    # potentially we want the shell script to generate a uuid each time, save the result in a folder named as the uuid
-    # and return the uuid as output, and use the autput uuid as input for the method extract
-    # final = q.enqueue(wrapper, chapter_url)
-
-    # size = len(q)
-
-    # return {'size': size}
     result = await run_in_threadpool(run_extraction, wrapper, chapter_url)
     return result
 
@@ -256,7 +235,7 @@ async def get_chapter(chapter_hash: str):
 
 
 def run_extraction(extractor, chapter_url):
-    # The OpenCV pipeline is memory intensive and is not safe to run concurrently
+    # Image processing is memory intensive and is not safe to run concurrently
     # in the initial single-instance deployment.
     with extraction_lock:
         return extractor(chapter_url)
@@ -267,16 +246,3 @@ def post_feedback(data: dict):
     logger.info(data)
     save_feedback(data['chapter_hash'], data['rating'], data['comment'])
     return {'status': 'success'}
-
-# @app.get("/result/{job_id}")
-# def result(job_id):
-#     job = q.fetch_job(job_id)
-
-#     if job.is_failed:
-#         return 'Job has failed!', 400
-
-#     while not job.is_finished:
-#         yield('Job not finished yet, wait for 1s')
-#         time.sleep(1)
-
-#     return(job.result)

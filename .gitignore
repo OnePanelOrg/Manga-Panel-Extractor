@@ -134,6 +134,8 @@ dmypy.json
 *.ipynb
 *.pdf
 *.png
+images/*
+!images/.gitinclude
 .vercel
 
 .DS_STORE
@@ -143,3 +145,4 @@ OnePanelLogs
 OnePanelLogs.*
 save_pid.txt
 jsons/*
+!jsons/.gitinclude

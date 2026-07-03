@@ -11,10 +11,15 @@ import requests
 from bs4 import BeautifulSoup
 from skimage import io
 
+SUPPORTED_IMAGE_EXTENSIONS = {".png", ".webp"}
+
+
 def name_requirements(src):
-    # Apparently this is working only for onepiece
-    # name_code = src.split('.png')[0].split('/')[-1].split('_')[-1]
-    return src.startswith("https://i") and src.endswith(".png")
+    if not isinstance(src, str) or not src.startswith("https://i"):
+        return False
+
+    extension = os.path.splitext(urlparse(src).path)[1].lower()
+    return extension in SUPPORTED_IMAGE_EXTENSIONS
 
 REQUEST_TIMEOUT = (10, 60)
 MAX_IMAGE_BYTES = 25 * 1024 * 1024
@@ -54,7 +59,7 @@ def download_lmages(url, folder):
     try:
         # Download each image
         for img_url in img_urls:
-            img_name = os.path.basename(img_url)
+            img_name = os.path.basename(urlparse(img_url).path)
             img_dict[img_name] = img_url
             parsed = urlparse(img_url)
             if parsed.scheme != "https":
@@ -102,7 +107,7 @@ def list_files(in_path):
         for file in filenames:
             filename, ext = os.path.splitext(file)
             ext = str.lower(ext)
-            if ext == '.jpg' or ext == '.jpeg' or ext == '.gif' or ext == '.png' or ext == '.pgm':
+            if ext in {'.jpg', '.jpeg', '.gif', '.png', '.webp', '.pgm'}:
                 img_files.append(os.path.join(dirpath, file))
             elif ext == '.bmp':
                 mask_files.append(os.path.join(dirpath, file))
