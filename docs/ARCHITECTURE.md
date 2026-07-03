@@ -41,13 +41,19 @@ background job, object storage, or shared cache in the checked-in application.
 For each normalized chapter URL:
 
 ```text
-images/<md5>/
+images/<md5>/ (temporary during extraction)
   <downloaded pages>
   img_dict.json
 
 jsons/<md5>/
   kumiko.json
 ```
+
+Downloaded pages use zero-padded sequential filenames and carry a `page_index`
+in `img_dict.json`. This preserves source HTML order through extraction. The
+whole image directory is removed after extraction, whether processing succeeds
+or fails. Legacy results without an explicit index use natural numeric filename
+ordering.
 
 The HTTP API stores and returns `kumiko.json`. Older deployments also generated
 `panel_extracted.json` using `PanelExtractor`; that duplicate output is no

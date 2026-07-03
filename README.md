@@ -14,10 +14,10 @@ be verified there.
 Given a chapter URL, the service:
 
 1. downloads matching PNG images from the chapter HTML;
-2. stores the original image URLs in `images/<chapter_hash>/img_dict.json`;
+2. stores the original image URLs alongside the temporary downloads;
 3. calculates the panel layout using the bundled Kumiko implementation;
 4. caches the result under `jsons/<chapter_hash>/kumiko.json`; and
-5. returns the Kumiko result to the caller.
+5. deletes the temporary images and returns the Kumiko result to the caller.
 
 The chapter hash is the MD5 of the chapter URL after its query string is
 removed. Processing and caching are synchronous and local to the service

@@ -1,6 +1,7 @@
 import logging
 import os, json
 import hashlib
+import shutil
 import threading
 from pathlib import Path
 from urllib.parse import urlparse
@@ -58,7 +59,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-from kumikolib import Kumiko
+from kumikolib import Kumiko, page_sort_key
 
 k = Kumiko({
 	'debug': False,
@@ -129,35 +130,37 @@ def process_chapter(chapter_url):
     logger.info(f"request_id: {request_id}, chapter hash {chapter_hash}")
 
     result_file = JSONS_DIR / chapter_hash / "kumiko.json"
+    image_path = IMAGES_DIR / chapter_hash
     if result_file.exists():
+        shutil.rmtree(image_path, ignore_errors=True)
         logger.info("already processed")
         return {"chapter_hash":chapter_hash}
         # return json.load(open(f"./jsons/{chapter_hash}/kumiko.json"))
 
-    image_path = IMAGES_DIR / chapter_hash
-    total = download_lmages(chapter_url, str(image_path))
+    try:
+        total = download_lmages(chapter_url, str(image_path))
 
-    # _path = f"./images/345bb755-1a8e-47f3-bce7-e450cfcc89a0"
+        # _path = f"./images/345bb755-1a8e-47f3-bce7-e450cfcc89a0"
 
-    logger.info(f"{total} images downloaded")
+        logger.info(f"{total} images downloaded")
 
-    info = k.parse_dir(str(image_path))
-    if not info["pages"]:
-        raise HTTPException(
-            status_code=422,
-            detail="No supported chapter images were found; result was not cached",
-        )
-  
-    # checking if the directory demo_folder  
-    # exist or not. 
-    foldername = JSONS_DIR / chapter_hash
-    foldername.mkdir(parents=True, exist_ok=True)
+        info = k.parse_dir(str(image_path))
+        if not info["pages"]:
+            raise HTTPException(
+                status_code=422,
+                detail="No supported chapter images were found; result was not cached",
+            )
 
-    save_file(info, str(foldername / "kumiko.json"))
+        foldername = JSONS_DIR / chapter_hash
+        foldername.mkdir(parents=True, exist_ok=True)
 
-    logger.info("panels extracted")
-    
-    return {"chapter_hash":chapter_hash}
+        save_file(info, str(foldername / "kumiko.json"))
+
+        logger.info("panels extracted")
+
+        return {"chapter_hash":chapter_hash}
+    finally:
+        shutil.rmtree(image_path, ignore_errors=True)
 
 @app.post("/v2/chapter")
 async def post_chapter_v2(data: Data):
@@ -181,6 +184,10 @@ async def get_chapter(chapter_hash: str):
 
     with result_file.open() as file:
         result = json.load(file)
+
+    result["pages"].sort(key=page_sort_key)
+    for page_index, page in enumerate(result["pages"], start=1):
+        page["pageIndex"] = page_index
 
     return result
 

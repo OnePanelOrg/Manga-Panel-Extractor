@@ -35,10 +35,11 @@ external requests and consumes CPU, memory, disk, and Railway usage.
 
 ## Storage behavior
 
-Downloaded images, generated Kumiko JSON, and rotating logs are written to the local
-working directory. Unless Railway has a persistent volume mounted, these files
-can disappear on redeploy or restart. With multiple replicas, a result written
-by one replica may not be available to another.
+Downloaded images are temporary and are removed immediately after extraction,
+including when extraction fails. Generated Kumiko JSON and rotating logs remain
+in the local working directory. Unless Railway has a persistent volume mounted,
+these files can disappear on redeploy or restart. With multiple replicas, a
+result written by one replica may not be available to another.
 
 Historical cache directories may still contain `panel_extracted.json` from the
 removed OpenCV extraction path. The application no longer reads or writes that
