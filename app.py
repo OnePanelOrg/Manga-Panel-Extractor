@@ -201,6 +201,5 @@ def run_extraction(extractor, chapter_url):
 @app.post("/v2/feedback")
 def post_feedback(data: dict):
     logger.info("New Feedback")
-    logger.info(data)
     save_feedback(data['chapter_hash'], data['rating'], data['comment'])
     return {'status': 'success'}

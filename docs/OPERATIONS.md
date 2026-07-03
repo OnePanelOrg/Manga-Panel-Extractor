@@ -56,9 +56,9 @@ midnight. Railway's standard-output logs are the primary operational record.
 The local file is subject to the same persistence and disk-growth limitations
 as other local data.
 
-The service logs chapter hashes, request IDs, and feedback bodies. Feedback
-comments may contain user-provided or sensitive text, so production logging
-should be reviewed before broader use.
+The service logs chapter hashes, request IDs, and a generic event when feedback
+is received. It does not log feedback ratings or comments because comments may
+contain user-provided or sensitive text.
 
 ## Failure guide
 
@@ -69,7 +69,8 @@ should be reviewed before broader use.
 | Request fails after a restart | Local cache was ephemeral |
 | `GET /v2/chapter/{hash}` returns 404 | Hash was never generated on this instance, cache was lost, or another replica owns it |
 | Chapter request is slow or times out | Downloads and CPU-heavy image processing run synchronously |
-| Feedback request returns 500 | Missing/invalid MySQL variables, database unavailable, missing table, or invalid connection handling |
+| Feedback request returns 500 with `DatabaseConnectionError` in the service logs | Missing/invalid MySQL variables or database unavailable |
+| Feedback request returns 500 with a MySQL table error in the service logs | The `feedback` table has not been created or its schema is incompatible |
 | Existing image directory causes later failure | `download_lmages()` returns early even if `img_dict.json` or images are incomplete |
 
 ## Known technical risks
@@ -83,8 +84,7 @@ should be reviewed before broader use.
 5. CORS is hard-coded. Star patterns in `allow_origins` are literal strings,
    not wildcard host matching.
 6. `GET /v2/chapter/{hash}` assumes `jsons/` exists and directly reads files.
-7. Feedback connects synchronously and does not handle a failed connection
-   before calling `cursor()`.
+7. Feedback connects synchronously on every request and has no retry policy.
 8. Dependencies are pinned to 2023-era versions and need a deliberate security
    and compatibility upgrade.
 9. There is no production-grade automated test suite or deployment smoke test.

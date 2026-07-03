@@ -68,6 +68,35 @@ DATABASE_USER
 DATABASE_PASSWORD
 ```
 
+For a Railway MySQL service named `MySQL`, configure these reference variables
+on the backend service:
+
+```text
+DATABASE_HOST=${{MySQL.MYSQLHOST}}
+DATABASE_NAME=${{MySQL.MYSQLDATABASE}}
+DATABASE_USER=${{MySQL.MYSQLUSER}}
+DATABASE_PASSWORD=${{MySQL.MYSQLPASSWORD}}
+```
+
+Create the table before enabling the feedback endpoint:
+
+```sql
+CREATE TABLE feedback (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    chapter_hash VARCHAR(64) NOT NULL,
+    rating TINYINT UNSIGNED NOT NULL,
+    comment TEXT NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT feedback_rating_range CHECK (rating BETWEEN 0 AND 5),
+    INDEX idx_feedback_chapter_hash (chapter_hash)
+);
+```
+
+The application currently has no migration runner, so this schema must be
+applied manually. Failed MySQL connections raise `DatabaseConnectionError` in
+the backend logs. Feedback ratings and comments are deliberately excluded from
+logs.
+
 No Redis or queue variables are used by the active application.
 
 ## Deployment verification checklist

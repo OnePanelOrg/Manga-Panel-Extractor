@@ -73,6 +73,9 @@ DATABASE_USER
 DATABASE_PASSWORD
 ```
 
+Railway MySQL reference-variable mappings and the required `feedback` table
+schema are documented in [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
+
 Do not commit `.env`; it is ignored by Git.
 
 ## Current source compatibility
