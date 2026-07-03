@@ -1,14 +1,16 @@
 import logging
 import os, json
 import hashlib
+import threading
+from pathlib import Path
+from urllib.parse import urlparse
 
 from logging.handlers import TimedRotatingFileHandler
-from time import time
-from typing import Union
 from uuid import uuid4
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
+from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 # from redis import Redis
@@ -19,7 +21,15 @@ from panel_extractor import PanelExtractor
 from utils import download_lmages, save_file
 from feedback_service import save_feedback
 
+load_dotenv()
+
 app = FastAPI()
+DATA_DIR = Path(os.environ.get("DATA_DIR", "./data")).resolve()
+IMAGES_DIR = DATA_DIR / "images"
+JSONS_DIR = DATA_DIR / "jsons"
+IMAGES_DIR.mkdir(parents=True, exist_ok=True)
+JSONS_DIR.mkdir(parents=True, exist_ok=True)
+extraction_lock = threading.Lock()
 
 origins = [
     "http://localhost:3000",
@@ -39,16 +49,17 @@ origins = [
     "https://reader.onepanel.app/",
     "https://reader.onepanel.app/*"
 ]
+extra_origins = os.environ.get("ALLOWED_ORIGINS", "")
+origins.extend(origin.strip() for origin in extra_origins.split(",") if origin.strip())
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
+    allow_origin_regex=r"https://one-panel-next(?:-git-[a-z0-9-]+)?-onepanel\.vercel\.app",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-load_dotenv()
 
 # redis_conn = Redis(
 #   host= os.environ.get('REDIS_HOST'),
@@ -98,9 +109,27 @@ class Data(BaseModel):
     chapter_url: str
 
 
+def validate_chapter_url(chapter_url: str) -> str:
+    parsed = urlparse(chapter_url)
+    if parsed.scheme != "https" or parsed.hostname not in {
+        "opchapters.com",
+        "www.opchapters.com",
+    }:
+        raise HTTPException(
+            status_code=400,
+            detail="Only HTTPS URLs from opchapters.com are supported",
+        )
+    return chapter_url
+
+
 @app.get("/")
 def read_root():
-    return {"Hello": "World"}
+    return {"service": "onepanel-api", "status": "ok"}
+
+
+@app.get("/health")
+def health():
+    return {"status": "ok"}
 
 # @app.get('/queueSize')
 # def queueSize():
@@ -119,31 +148,29 @@ def wrapper(chapter_url):
     chapter_hash = hashlib.md5(chapter_url_encoded).hexdigest()
     logger.info(f"request_id: {request_id}, chapter hash {chapter_hash}")
 
-    if os.path.exists(f"./jsons/{chapter_hash}/kumiko.json"):
+    result_file = JSONS_DIR / chapter_hash / "kumiko.json"
+    if result_file.exists():
         logger.info("already processed")
-        return json.load(open(f"./jsons/{chapter_hash}/kumiko.json"))
+        with result_file.open() as file:
+            return json.load(file)
 
-    _path = f"./images/{chapter_hash}"
-    total = download_lmages(chapter_url, _path)
+    image_path = IMAGES_DIR / chapter_hash
+    total = download_lmages(chapter_url, str(image_path))
 
     # _path = f"./images/345bb755-1a8e-47f3-bce7-e450cfcc89a0"
 
     logger.info(f"{total} images downloaded")
 
-    panels_extracted = panel_extractor.extract(_path)
-    info = k.parse_dir(_path)
+    panels_extracted = panel_extractor.extract(str(image_path))
+    info = k.parse_dir(str(image_path))
   
     # checking if the directory demo_folder  
     # exist or not. 
-    foldername = f"./jsons/{chapter_hash}"
-    if not os.path.exists(foldername): 
-        
-        # if the demo_folder directory is not present  
-        # then create it. 
-        os.makedirs(foldername) 
+    foldername = JSONS_DIR / chapter_hash
+    foldername.mkdir(parents=True, exist_ok=True)
 
-    save_file(panels_extracted, f'{foldername}/panel_extracted.json')
-    save_file(info, f'{foldername}/kumiko.json')
+    save_file(panels_extracted, str(foldername / "panel_extracted.json"))
+    save_file(info, str(foldername / "kumiko.json"))
 
     logger.info("panels extracted")
     
@@ -159,32 +186,29 @@ def wrapper2(chapter_url):
     chapter_hash = hashlib.md5(chapter_url_encoded).hexdigest()
     logger.info(f"request_id: {request_id}, chapter hash {chapter_hash}")
 
-    if os.path.exists(f"./jsons/{chapter_hash}/kumiko.json"):
+    result_file = JSONS_DIR / chapter_hash / "kumiko.json"
+    if result_file.exists():
         logger.info("already processed")
         return {"chapter_hash":chapter_hash}
         # return json.load(open(f"./jsons/{chapter_hash}/kumiko.json"))
 
-    _path = f"./images/{chapter_hash}"
-    total = download_lmages(chapter_url, _path)
+    image_path = IMAGES_DIR / chapter_hash
+    total = download_lmages(chapter_url, str(image_path))
 
     # _path = f"./images/345bb755-1a8e-47f3-bce7-e450cfcc89a0"
 
     logger.info(f"{total} images downloaded")
 
-    panels_extracted = panel_extractor.extract(_path)
-    info = k.parse_dir(_path)
+    panels_extracted = panel_extractor.extract(str(image_path))
+    info = k.parse_dir(str(image_path))
   
     # checking if the directory demo_folder  
     # exist or not. 
-    foldername = f"./jsons/{chapter_hash}"
-    if not os.path.exists(foldername): 
-        
-        # if the demo_folder directory is not present  
-        # then create it. 
-        os.makedirs(foldername) 
+    foldername = JSONS_DIR / chapter_hash
+    foldername.mkdir(parents=True, exist_ok=True)
 
-    save_file(panels_extracted, f'{foldername}/panel_extracted.json')
-    save_file(info, f'{foldername}/kumiko.json')
+    save_file(panels_extracted, str(foldername / "panel_extracted.json"))
+    save_file(info, str(foldername / "kumiko.json"))
 
     logger.info("panels extracted")
     
@@ -193,7 +217,7 @@ def wrapper2(chapter_url):
 @app.post("/chapter")
 async def post_chapter(data: Data):
     logger.info("New Request")
-    chapter_url = data.chapter_url
+    chapter_url = validate_chapter_url(data.chapter_url)
 
     # potentially we want the shell script to generate a uuid each time, save the result in a folder named as the uuid
     # and return the uuid as output, and use the autput uuid as input for the method extract
@@ -202,14 +226,15 @@ async def post_chapter(data: Data):
     # size = len(q)
 
     # return {'size': size}
-    result = wrapper(chapter_url)
+    result = await run_in_threadpool(run_extraction, wrapper, chapter_url)
     return result
 
 @app.post("/v2/chapter")
 async def post_chapter_v2(data: Data):
     logger.info("New Request V2")
 
-    result = wrapper2(data.chapter_url)
+    chapter_url = validate_chapter_url(data.chapter_url)
+    result = await run_in_threadpool(run_extraction, wrapper2, chapter_url)
 
     return result
 
@@ -217,18 +242,24 @@ async def post_chapter_v2(data: Data):
 async def get_chapter(chapter_hash: str):
     logger.info(f"New Get Request, chapter hash: {chapter_hash}")
 
-    # list folder names in ./jsons
-    folders = os.listdir('./jsons')
-
-    if chapter_hash not in folders:
+    result_file = JSONS_DIR / chapter_hash / "kumiko.json"
+    if not result_file.exists():
         raise HTTPException(
             status_code=404,
             detail="Item not found",
         )
 
-    result = json.load(open(f"./jsons/{chapter_hash}/kumiko.json"))
+    with result_file.open() as file:
+        result = json.load(file)
 
     return result
+
+
+def run_extraction(extractor, chapter_url):
+    # The OpenCV pipeline is memory intensive and is not safe to run concurrently
+    # in the initial single-instance deployment.
+    with extraction_lock:
+        return extractor(chapter_url)
 
 @app.post("/v2/feedback")
 def post_feedback(data: dict):

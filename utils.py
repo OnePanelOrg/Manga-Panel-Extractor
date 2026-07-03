@@ -1,6 +1,8 @@
 # stdlib
 import json
 import os
+import shutil
+from urllib.parse import urlparse
 
 import cv2
 # 3p
@@ -14,37 +16,69 @@ def name_requirements(src):
     # name_code = src.split('.png')[0].split('/')[-1].split('_')[-1]
     return src.startswith("https://i") and src.endswith(".png")
 
+REQUEST_TIMEOUT = (10, 60)
+MAX_IMAGE_BYTES = 25 * 1024 * 1024
+MAX_CHAPTER_IMAGES = 100
+
+
 def download_lmages(url, folder):
     # Send a GET request to the URL
-    response = requests. get(url)
+    response = requests.get(url, timeout=REQUEST_TIMEOUT)
+    response.raise_for_status()
+    final_host = urlparse(response.url).hostname
+    if final_host not in {"opchapters.com", "www.opchapters.com"}:
+        raise ValueError("Chapter URL redirected to an unsupported host")
 
     # Parse the HTML content using BeautifulSoup
     soup = BeautifulSoup(response.content, "html.parser")
     
     # Find all the unage tags and extract the image URLS
     img_tags = soup.find_all("img")
-    img_urls = [img['src'] for img in img_tags if name_requirements(img['src'])]
+    img_urls = [
+        img["src"]
+        for img in img_tags
+        if img.get("src") and name_requirements(img["src"])
+    ]
+    if not img_urls:
+        raise ValueError("No supported chapter images were found")
+    if len(img_urls) > MAX_CHAPTER_IMAGES:
+        raise ValueError(f"Chapter contains more than {MAX_CHAPTER_IMAGES} images")
 
     # Create the folder if not exist
-    if os.path.exists(folder):   
-        print("images already downloaded")
-        return 0
-
+    if os.path.exists(folder):
+        shutil.rmtree(folder)
     os.makedirs(folder)
 
     img_dict = {}
 
-    # Download each image
-    for img_url in img_urls:
-        img_name = os.path.basename(img_url)
-        img_dict[img_name] = img_url
-        img_data = requests.get(img_url).content
-        img_path = os.path.join(folder, img_name)
-        with open(img_path, "wb") as f:
-            f.write(img_data)
+    try:
+        # Download each image
+        for img_url in img_urls:
+            img_name = os.path.basename(img_url)
+            img_dict[img_name] = img_url
+            parsed = urlparse(img_url)
+            if parsed.scheme != "https":
+                raise ValueError("Chapter image URLs must use HTTPS")
+            image_response = requests.get(
+                img_url,
+                timeout=REQUEST_TIMEOUT,
+                stream=True,
+            )
+            image_response.raise_for_status()
+            img_path = os.path.join(folder, img_name)
+            with open(img_path, "wb") as f:
+                downloaded = 0
+                for chunk in image_response.iter_content(chunk_size=1024 * 1024):
+                    downloaded += len(chunk)
+                    if downloaded > MAX_IMAGE_BYTES:
+                        raise ValueError(f"Image exceeds {MAX_IMAGE_BYTES} bytes")
+                    f.write(chunk)
 
-    img_dict_path = os.path.join(folder, "img_dict.json")
-    save_file(img_dict, img_dict_path)
+        img_dict_path = os.path.join(folder, "img_dict.json")
+        save_file(img_dict, img_dict_path)
+    except Exception:
+        shutil.rmtree(folder, ignore_errors=True)
+        raise
 
     return len(img_urls)
 
