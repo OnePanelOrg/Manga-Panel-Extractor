@@ -1,6 +1,7 @@
 
 
 import os, json, sys, tempfile, requests
+import re
 import cv2 as cv
 import numpy as np
 import json
@@ -15,6 +16,21 @@ from kcore.debug import Debug
 
 class NotAnImageException (Exception):
 	pass
+
+
+def natural_sort_key(value):
+	return [
+		(1, int(part)) if part.isdigit() else (0, part.lower())
+		for part in re.split(r'(\d+)', os.path.basename(value))
+	]
+
+
+def page_sort_key(page):
+	page_index = page.get('pageIndex')
+	if isinstance(page_index, int):
+		return (0, page_index)
+	return (1, natural_sort_key(page.get('filename', '')))
+
 
 class Kumiko:
 	
@@ -87,14 +103,20 @@ class Kumiko:
 		if self.options['progress']:
 			print(len(filenames),'files to cut panels for')
 		
-		i = -1
-		for filename in sorted(filenames):
-			i += 1
+		def image_sort_key(filename):
+			metadata = img_dict.get(os.path.basename(filename))
+			if isinstance(metadata, dict) and isinstance(metadata.get('page_index'), int):
+				return (0, metadata['page_index'])
+			return (1, natural_sort_key(filename))
+
+		for page_index, filename in enumerate(sorted(filenames, key=image_sort_key), start=1):
 			# if self.options['progress']:
 			# 	print("\t",urls[i] if urls else filename)
 			
 			try:
-				infos.append(self.parse_image(filename,img_dict))
+				info = self.parse_image(filename,img_dict)
+				info['pageIndex'] = page_index
+				infos.append(info)
 			except NotAnImageException:
 				print("Not an image, will be ignored: {}".format(filename), file=sys.stderr) 
 				pass  # this file is not an image, will not be part of the results
@@ -297,12 +319,18 @@ class Kumiko:
 		size = list(self.img.shape[:2])
 		size.reverse()  # get a [width,height] list
 
-		actual_image_name = filename.split('/')[-1]
+		actual_image_name = os.path.basename(filename)
+		image_metadata = img_dict[actual_image_name]
+		source_url = (
+			image_metadata['source_url']
+			if isinstance(image_metadata, dict)
+			else image_metadata
+		)
 		
 		infos = {
 			'filename': os.path.basename(filename),
 			'size': size,
-			'image': img_dict[actual_image_name], # f"https://cdn.onepiecechapters.com/file/CDN-M-A-N/{actual_image_name}"
+			'image': source_url,
 		}
 		Panel.img_size = size
 		Panel.small_panel_ratio = self.options['min_panel_size_ratio']

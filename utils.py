@@ -58,12 +58,16 @@ def download_lmages(url, folder):
 
     try:
         # Download each image
-        for img_url in img_urls:
-            img_name = os.path.basename(urlparse(img_url).path)
-            img_dict[img_name] = img_url
+        for page_index, img_url in enumerate(img_urls, start=1):
             parsed = urlparse(img_url)
             if parsed.scheme != "https":
                 raise ValueError("Chapter image URLs must use HTTPS")
+            extension = os.path.splitext(parsed.path)[1].lower()
+            img_name = f"{page_index:04d}{extension}"
+            img_dict[img_name] = {
+                "page_index": page_index,
+                "source_url": img_url,
+            }
             image_response = requests.get(
                 img_url,
                 timeout=REQUEST_TIMEOUT,
