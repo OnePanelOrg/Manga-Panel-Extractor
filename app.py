@@ -118,48 +118,7 @@ def read_root():
 def health():
     return {"status": "ok"}
 
-def wrapper(chapter_url):
-    request_id = uuid4()
-    # strip date at end of url
-    chapter_url = chapter_url.split('?')[0]
-
-    # Encode the string to bytes
-    chapter_url_encoded = chapter_url.encode()
-    chapter_hash = hashlib.md5(chapter_url_encoded).hexdigest()
-    logger.info(f"request_id: {request_id}, chapter hash {chapter_hash}")
-
-    result_file = JSONS_DIR / chapter_hash / "kumiko.json"
-    if result_file.exists():
-        logger.info("already processed")
-        with result_file.open() as file:
-            return json.load(file)
-
-    image_path = IMAGES_DIR / chapter_hash
-    total = download_lmages(chapter_url, str(image_path))
-
-    # _path = f"./images/345bb755-1a8e-47f3-bce7-e450cfcc89a0"
-
-    logger.info(f"{total} images downloaded")
-
-    info = k.parse_dir(str(image_path))
-    if not info["pages"]:
-        raise HTTPException(
-            status_code=422,
-            detail="No supported chapter images were found; result was not cached",
-        )
-  
-    # checking if the directory demo_folder  
-    # exist or not. 
-    foldername = JSONS_DIR / chapter_hash
-    foldername.mkdir(parents=True, exist_ok=True)
-
-    save_file(info, str(foldername / "kumiko.json"))
-
-    logger.info("panels extracted")
-    
-    return info
-
-def wrapper2(chapter_url):
+def process_chapter(chapter_url):
     request_id = uuid4()
     # strip date at end of url
     chapter_url = chapter_url.split('?')[0]
@@ -200,20 +159,12 @@ def wrapper2(chapter_url):
     
     return {"chapter_hash":chapter_hash}
 
-@app.post("/chapter")
-async def post_chapter(data: Data):
-    logger.info("New Request")
-    chapter_url = validate_chapter_url(data.chapter_url)
-
-    result = await run_in_threadpool(run_extraction, wrapper, chapter_url)
-    return result
-
 @app.post("/v2/chapter")
 async def post_chapter_v2(data: Data):
     logger.info("New Request V2")
 
     chapter_url = validate_chapter_url(data.chapter_url)
-    result = await run_in_threadpool(run_extraction, wrapper2, chapter_url)
+    result = await run_in_threadpool(run_extraction, process_chapter, chapter_url)
 
     return result
 

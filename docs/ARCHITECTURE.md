@@ -5,7 +5,7 @@
 ```text
 Client
   |
-  | POST /chapter or /v2/chapter
+  | POST /v2/chapter
   v
 FastAPI (app.py)
   |

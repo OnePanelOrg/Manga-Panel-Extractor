@@ -42,12 +42,11 @@ Interactive API documentation is available at
 | Method | Path | Purpose |
 | --- | --- | --- |
 | `GET` | `/` | Basic process check; returns `{"Hello":"World"}` |
-| `POST` | `/chapter` | Process a chapter synchronously and return layout JSON |
 | `POST` | `/v2/chapter` | Process a chapter and return its hash |
 | `GET` | `/v2/chapter/{chapter_hash}` | Read a cached Kumiko result |
 | `POST` | `/v2/feedback` | Save feedback to the configured MySQL database |
 
-Request body for either chapter POST:
+Request body for the chapter POST:
 
 ```json
 {
