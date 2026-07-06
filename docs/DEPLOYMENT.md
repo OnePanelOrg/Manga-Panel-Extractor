@@ -5,10 +5,16 @@
 Owner-provided operational information, recorded on 2026-07-03:
 
 - platform: Railway;
+- Railway project dashboard:
+  `https://railway.com/project/6811f2fb-e225-48b4-bc2f-017321106faf`;
 - repository: `OnePanelOrg/Manga-Panel-Extractor`;
 - branch expected in production: `master`;
 - Railway account/project cost: **$5 per month**;
 - a Railway limit is configured at **10**.
+
+The Railway URL above is an authenticated dashboard link, not the backend's
+public API domain. Record the generated public domain separately after
+confirming it in the project's service settings.
 
 The meaning and unit of “limit at 10” were not available in the repository. It
 may refer to a spending/usage limit or another Railway project limit. Verify the
@@ -27,9 +33,10 @@ The repository includes:
 - `DATA_DIR=/data`.
 
 There is no `railway.toml`, `railway.json`, Procfile, CI deployment workflow, or
-production domain/service identifier. The health check, region, replicas,
-volume, environment variables, domain, and billing controls must still be
-confirmed in the Railway dashboard.
+production domain/service identifier in the repository. The Railway project
+dashboard is recorded above, but the health check, region, replicas, volume,
+environment variables, public domain, and billing controls must still be
+confirmed there.
 
 ## Expected service configuration
 
