@@ -11,6 +11,7 @@ from functools import reduce
 
 from kcore.panel import Panel
 from kcore.debug import Debug
+from kcore.detection import border_dark_fraction, dark_gutter_panels, has_dark_gutters
 
 
 
@@ -40,6 +41,7 @@ class Kumiko:
 	def __init__(self,options={}):
 		
 		self.dbg = Debug('debug' in options and options['debug'])
+		self.options = {}
 		
 		for o in ['progress','rtl']:
 			self.options[o] = o in options and options[o]
@@ -50,6 +52,8 @@ class Kumiko:
 		self.options['min_panel_size_ratio'] = Panel.DEFAULT_MIN_PANEL_SIZE_RATIO
 		if 'min_panel_size_ratio' in options and options['min_panel_size_ratio']:
 			self.options['min_panel_size_ratio'] = options['min_panel_size_ratio']
+
+		self.options['dark_page_strategy'] = options.get('dark_page_strategy', 'adaptive')
 	
 	
 	def parse_url_list(self,urls):
@@ -346,12 +350,36 @@ class Kumiko:
 		
 		self.gray = cv.cvtColor(self.img,cv.COLOR_BGR2GRAY)
 		self.dbg.add_image(self.gray,'Shades of gray')
+
+		dark_fraction = border_dark_fraction(self.gray)
+		infos['backgroundDarkFraction'] = dark_fraction
+		if (
+			self.options['dark_page_strategy'] == 'adaptive'
+			and has_dark_gutters(self.gray)
+		):
+			panels = dark_gutter_panels(
+				self.gray,
+				self.options['min_panel_size_ratio'],
+			)
+			if len(panels) > 1:
+				infos['background'] = 'black'
+				infos['detector'] = 'adaptive-dark-gutter'
+				infos['gutters'] = [0, 0]
+				panel_objects = [Panel(box) for box in panels]
+				panel_objects.sort()
+				infos['panels'] = [
+					panel.to_xywh_path()
+					for panel in panel_objects
+				]
+				return infos
 		
 		for bgcol in ['white','black']:
 			res = self.parse_image_with_bgcol(infos.copy(),filename,bgcol)
 			if len(res['panels']) > 1:
+				res['detector'] = 'legacy-contours'
 				return res
 		
+		res['detector'] = 'legacy-contours'
 		return res
 	
 	

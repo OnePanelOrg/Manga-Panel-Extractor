@@ -136,6 +136,9 @@ dmypy.json
 *.png
 images/*
 !images/.gitinclude
+research/fixtures/source/*
+research/results/*.jpg
+research/results/report.html
 .vercel
 
 .DS_STORE
