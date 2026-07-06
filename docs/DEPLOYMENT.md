@@ -53,13 +53,26 @@ Suggested health-check path:
 /
 ```
 
-This confirms the Python process and routing are alive, but does not test a
-chapter source, image processing, persistent storage, or MySQL.
+This confirms the Python process and routing are alive, but does not test Clerk,
+Stripe, a chapter source, image processing, persistent storage, or MySQL.
 
 ## Variables
 
-The core chapter endpoints have no declared secrets. The feedback endpoint
-requires:
+Authentication and subscriptions require:
+
+```text
+CLERK_ISSUER
+CLERK_JWKS_URL
+CLERK_AUTHORIZED_PARTIES
+STRIPE_SECRET_KEY
+STRIPE_PRICE_ID
+FRONTEND_URL
+```
+
+The Stripe Price must be active, recurring monthly, and exactly €4.99 EUR.
+Configure the Stripe Customer Portal in the same Stripe mode as the secret key.
+
+The feedback endpoint requires:
 
 ```text
 DATABASE_HOST
@@ -112,6 +125,8 @@ In Railway, record or verify:
 - replica count and resource allocation;
 - whether a persistent volume is mounted for `images/`, `jsons/`, and logs;
 - database variables, if feedback is enabled;
+- Clerk issuer, JWKS URL, and authorized frontend origins;
+- Stripe secret key, €4.99 monthly Price ID, and Customer Portal configuration;
 - the exact name, unit, behavior, and notification settings of the limit at 10;
 - current plan name, included usage, and expected monthly maximum.
 

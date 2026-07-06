@@ -33,3 +33,6 @@ uvloop==0.17.0
 watchfiles==0.19.0
 websockets==11.0.2
 mysql-connector-python==8.3.0
+cryptography==45.0.7
+PyJWT==2.10.1
+stripe==14.4.1

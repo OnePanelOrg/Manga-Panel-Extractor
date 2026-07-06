@@ -44,6 +44,9 @@ Interactive API documentation is available at
 | `GET` | `/` | Basic process check; returns `{"Hello":"World"}` |
 | `POST` | `/v2/chapter` | Process a chapter and return its hash |
 | `GET` | `/v2/chapter/{chapter_hash}` | Read a cached Kumiko result |
+| `GET` | `/v2/billing/status` | Read the authenticated user's subscription |
+| `POST` | `/v2/billing/checkout` | Create a Stripe subscription Checkout |
+| `POST` | `/v2/billing/portal` | Open Stripe's customer billing portal |
 | `POST` | `/v2/feedback` | Save feedback to the configured MySQL database |
 
 Request body for the chapter POST:
@@ -64,7 +67,23 @@ Feedback body:
 }
 ```
 
-Only `POST /v2/feedback` requires database variables:
+Chapter and billing endpoints require a Clerk bearer token. Chapter creation and
+retrieval also require an active Stripe subscription. Configure:
+
+```text
+CLERK_ISSUER
+CLERK_JWKS_URL
+CLERK_AUTHORIZED_PARTIES=http://localhost:3000,https://reader.onepanel.app
+STRIPE_SECRET_KEY
+STRIPE_PRICE_ID
+FRONTEND_URL=https://reader.onepanel.app
+```
+
+`STRIPE_PRICE_ID` must reference an active recurring Price for exactly €4.99 EUR
+per month. Checkout does not configure a free trial. Subscription access is
+checked directly against Stripe, making Stripe the source of truth.
+
+`POST /v2/feedback` requires database variables:
 
 ```text
 DATABASE_HOST

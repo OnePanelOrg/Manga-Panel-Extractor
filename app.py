@@ -10,7 +10,7 @@ from logging.handlers import TimedRotatingFileHandler
 from uuid import uuid4
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException
 from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -18,6 +18,13 @@ from pydantic import BaseModel
 # project
 from utils import download_lmages, save_file
 from feedback_service import save_feedback
+from auth_service import require_user
+from billing_service import (
+    create_checkout_url,
+    create_portal_url,
+    get_subscription_state,
+    require_active_subscription,
+)
 
 load_dotenv()
 
@@ -163,18 +170,23 @@ def process_chapter(chapter_url):
         shutil.rmtree(image_path, ignore_errors=True)
 
 @app.post("/v2/chapter")
-async def post_chapter_v2(data: Data):
+async def post_chapter_v2(data: Data, user_id: str = Depends(require_user)):
     logger.info("New Request V2")
 
+    await run_in_threadpool(require_active_subscription, user_id)
     chapter_url = validate_chapter_url(data.chapter_url)
     result = await run_in_threadpool(run_extraction, process_chapter, chapter_url)
 
     return result
 
 @app.get("/v2/chapter/{chapter_hash}")
-async def get_chapter(chapter_hash: str):
+async def get_chapter(
+    chapter_hash: str,
+    user_id: str = Depends(require_user),
+):
     logger.info(f"New Get Request, chapter hash: {chapter_hash}")
 
+    await run_in_threadpool(require_active_subscription, user_id)
     result_file = JSONS_DIR / chapter_hash / "kumiko.json"
     if not result_file.exists():
         raise HTTPException(
@@ -190,6 +202,24 @@ async def get_chapter(chapter_hash: str):
         page["pageIndex"] = page_index
 
     return result
+
+
+@app.get("/v2/billing/status")
+async def billing_status(user_id: str = Depends(require_user)):
+    state = await run_in_threadpool(get_subscription_state, user_id)
+    return {"active": state.active, "status": state.status}
+
+
+@app.post("/v2/billing/checkout")
+async def billing_checkout(user_id: str = Depends(require_user)):
+    url = await run_in_threadpool(create_checkout_url, user_id)
+    return {"url": url}
+
+
+@app.post("/v2/billing/portal")
+async def billing_portal(user_id: str = Depends(require_user)):
+    url = await run_in_threadpool(create_portal_url, user_id)
+    return {"url": url}
 
 
 def run_extraction(extractor, chapter_url):

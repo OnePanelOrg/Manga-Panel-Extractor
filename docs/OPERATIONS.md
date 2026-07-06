@@ -68,6 +68,9 @@ contain user-provided or sensitive text.
 | Chapter returns HTTP 422 with no supported images | Source images do not match the supported `https://i*.png`/`https://i*.webp` pattern, site HTML changed, or lazy-loaded images use another attribute |
 | Request fails after a restart | Local cache was ephemeral |
 | `GET /v2/chapter/{hash}` returns 404 | Hash was never generated on this instance, cache was lost, or another replica owns it |
+| Chapter or billing request returns 401 | Clerk token is missing, expired, has the wrong issuer, or has an unauthorized `azp` |
+| Chapter request returns 402 | The authenticated user has no active Stripe subscription |
+| Checkout returns 503 | `STRIPE_PRICE_ID` is not an active €4.99 EUR monthly recurring Price |
 | Chapter request is slow or times out | Downloads and CPU-heavy image processing run synchronously |
 | Feedback request returns 500 with `DatabaseConnectionError` in the service logs | Missing/invalid MySQL variables or database unavailable |
 | Feedback request returns 500 with a MySQL table error in the service logs | The `feedback` table has not been created or its schema is incompatible |
@@ -75,14 +78,15 @@ contain user-provided or sensitive text.
 
 ## Known technical risks
 
-1. Network calls have no timeout, retry, status validation, content limit, or
-   URL allowlist. A caller controls the chapter URL, making SSRF and resource
-   exhaustion relevant production risks.
-2. Endpoints have no authentication or rate limiting.
+1. Chapter download network calls have no timeout, retry, status validation, or
+   content limit. The chapter URL has a strict HTTPS host allowlist, but resource
+   exhaustion remains a production risk.
+2. Chapter and billing endpoints require Clerk authentication, and chapter
+   access requires a Stripe subscription. Rate limiting is still absent.
 3. Processing blocks the request worker and can consume substantial memory.
 4. Local state is not safe for ephemeral or horizontally scaled deployment.
-5. CORS is hard-coded. Star patterns in `allow_origins` are literal strings,
-   not wildcard host matching.
+5. CORS defaults are partly hard-coded; production additions depend on
+   `ALLOWED_ORIGINS`.
 6. `GET /v2/chapter/{hash}` assumes `jsons/` exists and directly reads files.
 7. Feedback connects synchronously on every request and has no retry policy.
 8. Dependencies are pinned to 2023-era versions and need a deliberate security
@@ -98,8 +102,7 @@ chapter cache.
 2. Confirm Railway builds the checked-in Dockerfile and mounts durable storage
    at `/data`.
 3. Move generated data to durable object/database storage.
-4. Add URL validation, request timeouts, response limits, authentication, and
-   rate limiting.
+4. Add download request timeouts, response limits, and rate limiting.
 5. Move extraction into a background job with explicit job status.
 6. Add isolated tests for URL normalization, downloading, panel output, cache
    behavior, and every API endpoint.
