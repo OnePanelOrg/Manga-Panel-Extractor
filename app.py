@@ -52,7 +52,13 @@ origins = [
     "https://one-panel-next-*-onepanel.vercel.app/*",
     "https://reader.onepanel.app",
     "https://reader.onepanel.app/",
-    "https://reader.onepanel.app/*"
+    "https://reader.onepanel.app/*",
+    "https://onepanel.app",
+    "https://onepanel.app/",
+    "https://onepanel.app/*",
+    "https://www.onepanel.app",
+    "https://www.onepanel.app/",
+    "https://www.onepanel.app/*"
 ]
 extra_origins = os.environ.get("ALLOWED_ORIGINS", "")
 origins.extend(origin.strip() for origin in extra_origins.split(",") if origin.strip())
