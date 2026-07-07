@@ -142,6 +142,7 @@ research/results/report.html
 research/vision-benchmark*/
 research/vision-benchmark*.jpg
 .vercel
+.panel_llm_cache/
 
 .DS_STORE
 

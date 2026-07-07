@@ -15,7 +15,8 @@ Given a chapter URL, the service:
 
 1. downloads matching PNG images from the chapter HTML;
 2. stores the original image URLs alongside the temporary downloads;
-3. calculates the panel layout using the bundled Kumiko implementation;
+3. calculates the panel layout using the bundled Kumiko implementation, with an
+   optional vision LLM fallback or replacement pass;
 4. caches the result under `jsons/<chapter_hash>/kumiko.json`; and
 5. deletes the temporary images and returns the Kumiko result to the caller.
 
@@ -96,6 +97,21 @@ Railway MySQL reference-variable mappings and the required `feedback` table
 schema are documented in [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 
 Do not commit `.env`; it is ignored by Git.
+
+Optional vision-LLM panel detection is controlled at runtime:
+
+```text
+PANEL_LLM_MODE=off|fallback|always
+PANEL_LLM_MODEL_CHOICE=quality|cheap
+PANEL_LLM_MODEL=openai/gpt-5.5
+PANEL_LLM_CHEAP_MODEL=qwen/qwen3-vl-30b-a3b-thinking
+OPENROUTER_API_KEY=...
+```
+
+`off` is the default. `fallback` uses local detector-confidence heuristics before
+calling the LLM. `always` runs the configured LLM for every page. LLM results are
+cached by image hash and model under `.panel_llm_cache/` unless
+`PANEL_LLM_CACHE_DIR` is set.
 
 ## Current source compatibility
 
