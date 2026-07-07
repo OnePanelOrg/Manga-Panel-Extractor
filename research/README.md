@@ -61,3 +61,38 @@ using one-to-one IoU matching, plus exact page accuracy. The next POC should
 combine dark-gutter splits with outline evidence for mixed-polarity leaves,
 rather than relaxing projection thresholds globally (which over-segments
 speech balloons and white panel interiors).
+
+## Vision-LLM smoke benchmark
+
+`benchmark_vision.py` sends the same resized page and strict bounding-box schema
+to either Vercel AI Gateway or OpenRouter, while also recording the current
+adaptive detector output. Results include JSON, latency and side-by-side overlay
+JPEGs. API keys and generated results are not committed.
+
+Put provider keys in the repository-root `.env` file. The benchmark loads it
+automatically and `.env` is ignored by Git:
+
+```sh
+OPENROUTER_API_KEY=...
+AI_GATEWAY_API_KEY=...
+```
+
+Vercel:
+
+```sh
+PYTHONPATH=. .venv/bin/python research/benchmark_vision.py \
+  --provider vercel --model google/gemini-3-flash --limit 3
+```
+
+OpenRouter's free router is useful for a zero-cost smoke test, but it selects a
+model at random and is therefore not suitable for a controlled comparison:
+
+```sh
+PYTHONPATH=. .venv/bin/python research/benchmark_vision.py \
+  --provider openrouter --model openrouter/free --limit 3
+```
+
+Inspect `research/vision-benchmark/*-baseline.jpg` beside `*-llm.jpg`. Do not
+treat panel count as an accuracy metric. A quantitative benchmark still needs
+human-authored ground-truth boxes and one-to-one IoU matching; these 16 pages
+are a useful failure-focused smoke set, not a representative test set.

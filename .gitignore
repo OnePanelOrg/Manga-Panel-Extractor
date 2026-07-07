@@ -139,6 +139,8 @@ images/*
 research/fixtures/source/*
 research/results/*.jpg
 research/results/report.html
+research/vision-benchmark*/
+research/vision-benchmark*.jpg
 .vercel
 
 .DS_STORE
