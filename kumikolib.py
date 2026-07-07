@@ -12,6 +12,12 @@ from functools import reduce
 from kcore.panel import Panel
 from kcore.debug import Debug
 from kcore.detection import border_dark_fraction, dark_gutter_panels, has_dark_gutters
+from kcore.vision_llm import (
+	VisionPanelError,
+	cached_request_panels,
+	estimate_detector_confidence,
+	panel_llm_config,
+)
 
 
 
@@ -54,6 +60,14 @@ class Kumiko:
 			self.options['min_panel_size_ratio'] = options['min_panel_size_ratio']
 
 		self.options['dark_page_strategy'] = options.get('dark_page_strategy', 'adaptive')
+		self.options['panel_llm_mode'] = options.get('panel_llm_mode')
+		self.options['panel_llm_model'] = options.get('panel_llm_model')
+		self.options['panel_llm_cheap_model'] = options.get('panel_llm_cheap_model')
+		self.options['panel_llm_model_choice'] = options.get('panel_llm_model_choice')
+		self.options['panel_llm_api_url'] = options.get('panel_llm_api_url')
+		self.options['panel_llm_api_key_env'] = options.get('panel_llm_api_key_env')
+		self.options['panel_llm_timeout'] = options.get('panel_llm_timeout')
+		self.options['panel_llm_cache_dir'] = options.get('panel_llm_cache_dir')
 	
 	
 	def parse_url_list(self,urls):
@@ -371,16 +385,82 @@ class Kumiko:
 					panel.to_xywh_path()
 					for panel in panel_objects
 				]
-				return infos
+				return self.apply_panel_llm(filename, infos)
 		
 		for bgcol in ['white','black']:
 			res = self.parse_image_with_bgcol(infos.copy(),filename,bgcol)
 			if len(res['panels']) > 1:
 				res['detector'] = 'legacy-contours'
-				return res
+				return self.apply_panel_llm(filename, res)
 		
 		res['detector'] = 'legacy-contours'
-		return res
+		return self.apply_panel_llm(filename, res)
+
+
+	def apply_panel_llm(self, filename, result):
+		config = panel_llm_config(self.options)
+		mode = config['mode']
+		if mode not in ['off', 'fallback', 'always']:
+			result['panelLlm'] = {
+				'mode': mode,
+				'error': 'invalid PANEL_LLM_MODE; expected off, fallback, or always',
+			}
+			return result
+		if mode == 'off':
+			return result
+
+		confidence = estimate_detector_confidence(result, self.gray)
+		result['detectorConfidence'] = confidence
+		if mode == 'fallback' and not confidence['low']:
+			return result
+
+		local_detector = result.get('detector')
+		try:
+			llm_result = cached_request_panels(filename, config)
+		except VisionPanelError as error:
+			result['panelLlm'] = {
+				'mode': mode,
+				'model': config['model'],
+				'localDetector': local_detector,
+				'confidenceReasons': confidence['reasons'],
+				'error': str(error),
+				'debug': {
+					key: value for key, value in error.debug.items()
+					if key not in ['response_text', 'message']
+				},
+			}
+			return result
+
+		result['panels'] = self.panel_percentages_to_output(llm_result['panels'])
+		result['detector'] = 'vision-llm'
+		result['panelLlm'] = {
+			'mode': mode,
+			'model': llm_result.get('model', config['model']),
+			'localDetector': local_detector,
+			'confidenceReasons': confidence['reasons'],
+			'latencySeconds': llm_result.get('latency_seconds'),
+			'usage': llm_result.get('usage'),
+			'requestId': llm_result.get('request_id'),
+			'cacheHit': llm_result.get('cache_hit', False),
+		}
+		return result
+
+
+	def panel_percentages_to_output(self, panels):
+		img_width, img_height = Panel.img_size
+		panel_objects = []
+		for panel in panels:
+			x = round(panel['x'] * img_width / 100)
+			y = round(panel['y'] * img_height / 100)
+			width = round(panel['w'] * img_width / 100)
+			height = round(panel['h'] * img_height / 100)
+			x = max(0, min(x, img_width - 1))
+			y = max(0, min(y, img_height - 1))
+			width = max(1, min(width, img_width - x))
+			height = max(1, min(height, img_height - y))
+			panel_objects.append(Panel([x, y, width, height]))
+		panel_objects.sort()
+		return [panel.to_xywh_path() for panel in panel_objects]
 	
 	
 	def parse_image_with_bgcol(self,infos,filename,bgcol):
