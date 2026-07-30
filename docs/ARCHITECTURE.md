@@ -9,15 +9,16 @@ Client
   v
 FastAPI (app.py)
   |
-  +-- normalize URL and calculate MD5 chapter hash
+  +-- validate mode, authorize caller, and calculate mode-aware cache key
   |
   +-- utils.download_lmages()
   |     +-- fetch chapter HTML
   |     +-- select matching PNG/WebP <img> sources
   |     `-- write images/<hash>/ and img_dict.json
   |
-  +-- Kumiko.parse_dir()
-  |     `-- local panel detection, optional vision LLM pass -> kumiko.json
+  +-- construct per-request Kumiko detector
+  |     +-- standard -> local detector
+  |     `-- gpt-5.6-layout -> server-selected quality vision model
   |
   `-- return result or chapter hash
 ```
@@ -38,7 +39,7 @@ background job, object storage, or shared cache in the checked-in application.
 
 ## Data model
 
-For each normalized chapter URL:
+For each normalized chapter URL and segmentation mode:
 
 ```text
 images/<md5>/ (temporary during extraction)
@@ -47,6 +48,7 @@ images/<md5>/ (temporary during extraction)
 
 jsons/<md5>/
   kumiko.json
+  metadata.json
 ```
 
 Downloaded pages use zero-padded sequential filenames and carry a `page_index`
@@ -64,8 +66,18 @@ the source image URL and a list of panel rectangles/paths for every page.
 
 ## Algorithm
 
-Kumiko is the default production layout algorithm and is configured for
-right-to-left reading:
+Each request receives a fresh Kumiko instance configured for right-to-left
+reading. The complete download/detection/write operation remains protected by
+the process-wide extraction lock because image processing is memory intensive.
+The API maps product modes to detector options as follows:
+
+| API mode | Detector configuration |
+| --- | --- |
+| `standard` | Local Kumiko, `panel_llm_mode=off` |
+| `gpt-5.6-layout` | Kumiko plus `panel_llm_mode=always`, quality model from server `PANEL_LLM_MODEL` |
+
+The API accepts no provider model field. This keeps provider migration and the
+exact marketed GPT-5.6 model identifier under server control.
 
 ```python
 {
@@ -96,7 +108,7 @@ Model and provider settings:
 
 ```text
 PANEL_LLM_MODEL_CHOICE=quality|cheap
-PANEL_LLM_MODEL=openai/gpt-5.5
+PANEL_LLM_MODEL=<confirmed-quality-provider-model>
 PANEL_LLM_CHEAP_MODEL=qwen/qwen3-vl-30b-a3b-thinking
 PANEL_LLM_API_URL=https://openrouter.ai/api/v1/chat/completions
 PANEL_LLM_API_KEY_ENV=OPENROUTER_API_KEY

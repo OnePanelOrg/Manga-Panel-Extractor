@@ -7,6 +7,7 @@ from fastapi import HTTPException
 
 
 ACTIVE_SUBSCRIPTION_STATUSES = {"active"}
+SUBSCRIPTION_REQUIRED = "subscription_required"
 
 
 @dataclass(frozen=True)
@@ -93,7 +94,10 @@ def require_active_subscription(clerk_user_id: str) -> None:
     if not get_subscription_state(clerk_user_id).active:
         raise HTTPException(
             status_code=402,
-            detail="An active OnePanel Pro subscription is required.",
+            detail={
+                "code": SUBSCRIPTION_REQUIRED,
+                "message": "An active OnePanel Pro subscription is required.",
+            },
         )
 
 

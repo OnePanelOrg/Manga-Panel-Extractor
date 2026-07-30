@@ -79,6 +79,30 @@ class AuthServiceTest(unittest.TestCase):
         with self.assertRaises(HTTPException) as raised:
             auth_service.require_user(None)
         self.assertEqual(raised.exception.status_code, 401)
+        self.assertEqual(
+            raised.exception.detail["code"],
+            auth_service.SIGN_IN_REQUIRED,
+        )
+
+    def test_optional_user_permits_missing_token(self):
+        self.assertIsNone(auth_service.optional_user(None))
+
+    @patch("auth_service.verify_session_token", return_value="user_123")
+    def test_optional_user_validates_token_when_present(self, verify):
+        self.assertEqual(
+            auth_service.optional_user("Bearer session-token"),
+            "user_123",
+        )
+        verify.assert_called_once_with("session-token")
+
+    def test_optional_user_rejects_malformed_token(self):
+        with self.assertRaises(HTTPException) as raised:
+            auth_service.optional_user("Basic credentials")
+        self.assertEqual(raised.exception.status_code, 401)
+        self.assertEqual(
+            raised.exception.detail["code"],
+            auth_service.SIGN_IN_REQUIRED,
+        )
 
 
 if __name__ == "__main__":
