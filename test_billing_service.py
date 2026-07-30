@@ -102,6 +102,22 @@ class BillingServiceTest(unittest.TestCase):
         self.assertTrue(state.active)
         self.assertEqual(state.status, "active")
 
+    @patch("billing_service.get_subscription_state")
+    def test_subscription_required_has_stable_error_code(self, state):
+        state.return_value = billing_service.SubscriptionState(
+            active=False,
+            status=None,
+        )
+
+        with self.assertRaises(HTTPException) as raised:
+            billing_service.require_active_subscription("user_123")
+
+        self.assertEqual(raised.exception.status_code, 402)
+        self.assertEqual(
+            raised.exception.detail["code"],
+            billing_service.SUBSCRIPTION_REQUIRED,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

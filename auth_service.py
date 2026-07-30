@@ -6,6 +6,15 @@ import jwt
 from fastapi import Header, HTTPException
 from jwt import PyJWKClient
 
+SIGN_IN_REQUIRED = "sign_in_required"
+
+
+def sign_in_required(message: str = "Sign in to continue.") -> HTTPException:
+    return HTTPException(
+        status_code=401,
+        detail={"code": SIGN_IN_REQUIRED, "message": message},
+    )
+
 
 def _required_env(name: str) -> str:
     value = os.environ.get(name, "").strip()
@@ -38,9 +47,8 @@ def verify_session_token(token: str) -> str:
             },
         )
     except (jwt.PyJWTError, RuntimeError) as error:
-        raise HTTPException(
-            status_code=401,
-            detail="Your session is invalid or expired. Please sign in again.",
+        raise sign_in_required(
+            "Your session is invalid or expired. Please sign in again.",
         ) from error
 
     authorized_parties = {
@@ -49,18 +57,29 @@ def verify_session_token(token: str) -> str:
         if party.strip()
     }
     if authorized_parties and claims.get("azp") not in authorized_parties:
-        raise HTTPException(status_code=401, detail="Invalid session origin.")
+        raise sign_in_required("Invalid session origin.")
 
     if claims.get("sts") not in (None, "active"):
-        raise HTTPException(status_code=401, detail="Your session is not active.")
+        raise sign_in_required("Your session is not active.")
 
     return claims["sub"]
+
+
+def optional_user(
+    authorization: Optional[str] = Header(default=None),
+) -> Optional[str]:
+    if authorization is None:
+        return None
+    scheme, separator, token = (authorization or "").partition(" ")
+    if separator != " " or scheme.lower() != "bearer" or not token.strip():
+        raise sign_in_required()
+    return verify_session_token(token.strip())
 
 
 def require_user(
     authorization: Optional[str] = Header(default=None),
 ) -> str:
-    scheme, separator, token = (authorization or "").partition(" ")
-    if separator != " " or scheme.lower() != "bearer" or not token.strip():
-        raise HTTPException(status_code=401, detail="Sign in to continue.")
-    return verify_session_token(token.strip())
+    user_id = optional_user(authorization)
+    if user_id is None:
+        raise sign_in_required()
+    return user_id

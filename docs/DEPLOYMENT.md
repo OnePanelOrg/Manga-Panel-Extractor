@@ -76,6 +76,16 @@ STRIPE_PRICE_ID
 FRONTEND_URL
 ```
 
+GPT-5.6 Layout additionally requires server-only vision provider settings:
+
+```text
+PANEL_LLM_MODEL=<confirmed provider model identifier>
+OPENROUTER_API_KEY=<secret>
+```
+
+Confirm the exact provider identifier in the deployment environment before
+enabling the frontend label. Never send it to or accept it from the browser.
+
 The Stripe Price must be active, recurring monthly, and exactly €4.99 EUR.
 Configure the Stripe Customer Portal in the same Stripe mode as the secret key.
 
@@ -120,6 +130,18 @@ logs.
 No Redis or queue variables are used by the active application.
 
 ## Deployment verification checklist
+
+Deploy the API before the freemium frontend. After the API deployment, verify in
+this order:
+
+1. Existing legacy chapter hashes still retrieve as public Standard chapters.
+2. Anonymous Standard creation and retrieval succeed.
+3. Standard and GPT-5.6 Layout produce distinct hashes for the same source URL.
+4. Signed-out and free-account premium creation is rejected before extraction.
+5. Active Pro premium creation uses the configured server quality model.
+6. A signed-in free account can retrieve a premium result, while an anonymous
+   caller cannot.
+7. Deploy the frontend, then verify upgrade and Checkout continuation flows.
 
 In Railway, record or verify:
 

@@ -1,9 +1,11 @@
+from __future__ import annotations
+
 import logging
 import os, json
-import hashlib
 import shutil
 import threading
 from pathlib import Path
+from typing import Optional
 from urllib.parse import urlparse
 
 from logging.handlers import TimedRotatingFileHandler
@@ -18,12 +20,20 @@ from pydantic import BaseModel
 # project
 from utils import download_lmages, save_file
 from feedback_service import save_feedback
-from auth_service import require_user
+from auth_service import optional_user, require_user, sign_in_required
 from billing_service import (
     create_checkout_url,
     create_portal_url,
     get_subscription_state,
     require_active_subscription,
+)
+from chapter_contract import (
+    AccessPolicy,
+    SegmentationMode,
+    chapter_cache_key,
+    detector_options_for,
+    read_metadata,
+    write_metadata,
 )
 
 load_dotenv()
@@ -74,13 +84,6 @@ app.add_middleware(
 
 from kumikolib import Kumiko, page_sort_key
 
-k = Kumiko({
-	'debug': False,
-	'progress': False,
-	'rtl': True,
-	'min_panel_size_ratio': False
-})
-
 # create logger
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -108,6 +111,10 @@ logger.addHandler(fh)
 
 class Data(BaseModel):
     chapter_url: str
+    segmentation_mode: SegmentationMode = SegmentationMode.STANDARD
+
+    class Config:
+        extra = "forbid"
 
 
 def validate_chapter_url(chapter_url: str) -> str:
@@ -132,14 +139,12 @@ def read_root():
 def health():
     return {"status": "ok"}
 
-def process_chapter(chapter_url):
+def process_chapter(
+    chapter_url,
+    mode: SegmentationMode = SegmentationMode.STANDARD,
+):
     request_id = uuid4()
-    # strip date at end of url
-    chapter_url = chapter_url.split('?')[0]
-
-    # Encode the string to bytes
-    chapter_url_encoded = chapter_url.encode()
-    chapter_hash = hashlib.md5(chapter_url_encoded).hexdigest()
+    chapter_hash = chapter_cache_key(chapter_url, mode)
     logger.info(f"request_id: {request_id}, chapter hash {chapter_hash}")
 
     result_file = JSONS_DIR / chapter_hash / "kumiko.json"
@@ -157,7 +162,8 @@ def process_chapter(chapter_url):
 
         logger.info(f"{total} images downloaded")
 
-        info = k.parse_dir(str(image_path))
+        detector = Kumiko(detector_options_for(mode))
+        info = detector.parse_dir(str(image_path))
         if not info["pages"]:
             raise HTTPException(
                 status_code=422,
@@ -167,6 +173,8 @@ def process_chapter(chapter_url):
         foldername = JSONS_DIR / chapter_hash
         foldername.mkdir(parents=True, exist_ok=True)
 
+        write_metadata(foldername, mode)
+        # Write the result last: its presence is the cache-complete marker.
         save_file(info, str(foldername / "kumiko.json"))
 
         logger.info("panels extracted")
@@ -175,24 +183,50 @@ def process_chapter(chapter_url):
     finally:
         shutil.rmtree(image_path, ignore_errors=True)
 
+async def authorize_creation(
+    mode: SegmentationMode,
+    user_id: Optional[str],
+) -> None:
+    if mode is SegmentationMode.STANDARD:
+        return
+    if user_id is None:
+        raise sign_in_required("Sign in to use GPT-5.6 Layout.")
+    await run_in_threadpool(require_active_subscription, user_id)
+
+
+def authorize_retrieval(metadata: dict, user_id: Optional[str]) -> None:
+    if metadata["access_policy"] == AccessPolicy.AUTHENTICATED.value:
+        if user_id is None:
+            raise sign_in_required("Sign in to view this GPT-5.6 Layout chapter.")
+
+
 @app.post("/v2/chapter")
-async def post_chapter_v2(data: Data, user_id: str = Depends(require_user)):
+async def post_chapter_v2(
+    data: Data,
+    user_id: Optional[str] = Depends(optional_user),
+):
     logger.info("New Request V2")
 
-    await run_in_threadpool(require_active_subscription, user_id)
     chapter_url = validate_chapter_url(data.chapter_url)
-    result = await run_in_threadpool(run_extraction, process_chapter, chapter_url)
+    # Premium authorization deliberately happens before entering the extraction
+    # lock, downloading pages, or consulting detector configuration.
+    await authorize_creation(data.segmentation_mode, user_id)
+    result = await run_in_threadpool(
+        run_extraction,
+        process_chapter,
+        chapter_url,
+        data.segmentation_mode,
+    )
 
     return result
 
 @app.get("/v2/chapter/{chapter_hash}")
 async def get_chapter(
     chapter_hash: str,
-    user_id: str = Depends(require_user),
+    user_id: Optional[str] = Depends(optional_user),
 ):
     logger.info(f"New Get Request, chapter hash: {chapter_hash}")
 
-    await run_in_threadpool(require_active_subscription, user_id)
     result_file = JSONS_DIR / chapter_hash / "kumiko.json"
     if not result_file.exists():
         raise HTTPException(
@@ -200,6 +234,8 @@ async def get_chapter(
             detail="Item not found",
         )
 
+    metadata = read_metadata(result_file.parent)
+    authorize_retrieval(metadata, user_id)
     with result_file.open() as file:
         result = json.load(file)
 
@@ -228,11 +264,11 @@ async def billing_portal(user_id: str = Depends(require_user)):
     return {"url": url}
 
 
-def run_extraction(extractor, chapter_url):
+def run_extraction(extractor, chapter_url, *args):
     # Image processing is memory intensive and is not safe to run concurrently
     # in the initial single-instance deployment.
     with extraction_lock:
-        return extractor(chapter_url)
+        return extractor(chapter_url, *args)
 
 @app.post("/v2/feedback")
 def post_feedback(data: dict):
