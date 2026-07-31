@@ -1,4 +1,5 @@
 import asyncio
+import io
 import json
 import tempfile
 import unittest
@@ -6,6 +7,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from fastapi import HTTPException
+from PIL import Image
 
 import app
 from chapter_contract import SegmentationMode, chapter_cache_key
@@ -17,12 +19,15 @@ class ChapterProcessingTest(unittest.TestCase):
         data_directory = Path(self.temporary_directory.name)
         self.images_directory = data_directory / "images"
         self.results_directory = data_directory / "jsons"
+        self.pages_directory = data_directory / "pages"
         self.images_directory.mkdir()
         self.results_directory.mkdir()
+        self.pages_directory.mkdir()
         self.directories = patch.multiple(
             app,
             IMAGES_DIR=self.images_directory,
             JSONS_DIR=self.results_directory,
+            PAGES_DIR=self.pages_directory,
         )
         self.directories.start()
 
@@ -88,6 +93,45 @@ class ChapterProcessingTest(unittest.TestCase):
 
         self.assertNotEqual(standard["chapter_hash"], premium["chapter_hash"])
         self.assertEqual(download_images.call_count, 2)
+
+    @patch("app.Kumiko")
+    def test_uploaded_chapter_uses_content_cache_and_persists_pages(self, kumiko):
+        image = io.BytesIO()
+        Image.new("RGB", (24, 32), "white").save(image, format="PNG")
+
+        detector = MagicMock()
+        detector.parse_dir.return_value = {
+            "pageCount": 1,
+            "pages": [{"filename": "0001.webp", "panels": [{"path": "0 0"}]}],
+        }
+        kumiko.return_value = detector
+
+        def upload():
+            return MagicMock(filename="page.png", file=io.BytesIO(image.getvalue()))
+
+        first = app.process_uploaded_chapter(
+            [upload()],
+            SegmentationMode.STANDARD,
+        )
+        second = app.process_uploaded_chapter(
+            [upload()],
+            SegmentationMode.STANDARD,
+        )
+
+        self.assertFalse(first["cache_hit"])
+        self.assertTrue(second["cache_hit"])
+        self.assertEqual(first["chapter_hash"], second["chapter_hash"])
+        self.assertEqual(detector.parse_dir.call_count, 1)
+        stored_pages = list(self.pages_directory.glob("*/0001.webp"))
+        self.assertEqual(len(stored_pages), 1)
+        result = json.loads(
+            (
+                self.results_directory
+                / first["chapter_hash"]
+                / "kumiko.json"
+            ).read_text()
+        )
+        self.assertEqual(result["pageCount"], 1)
 
     def test_missing_result_is_not_found(self):
         chapter_hash = chapter_cache_key(

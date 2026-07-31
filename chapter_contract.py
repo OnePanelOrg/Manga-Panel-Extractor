@@ -34,6 +34,13 @@ def chapter_cache_key(source_url: str, mode: SegmentationMode) -> str:
     return hashlib.md5(identity.encode()).hexdigest()
 
 
+def upload_cache_key(content_digest: str, mode: SegmentationMode) -> str:
+    """Identify extracted JSON independently from upload container metadata."""
+
+    identity = f"upload-v1\n{content_digest}\n{mode.value}"
+    return hashlib.sha256(identity.encode()).hexdigest()
+
+
 def access_policy_for(mode: SegmentationMode) -> AccessPolicy:
     if mode is SegmentationMode.STANDARD:
         return AccessPolicy.PUBLIC

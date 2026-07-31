@@ -5,7 +5,7 @@
 ```text
 Client
   |
-  | POST /v2/chapter
+  | POST /v2/chapter or POST /v2/chapter/upload
   v
 FastAPI (app.py)
   |
@@ -16,6 +16,12 @@ FastAPI (app.py)
   |     +-- select matching PNG/WebP <img> sources
   |     `-- write images/<hash>/ and img_dict.json
   |
+  +-- ingestion.ingest_uploads()
+  |     +-- safely read an archive, PDF, or loose images
+  |     +-- normalize pages to lossless WebP
+  |     +-- hash ordered decoded pixels
+  |     `-- reuse pages/<sha256>/ and mode-aware JSON when present
+  |
   +-- construct per-request Kumiko detector
   |     +-- standard -> local detector
   |     `-- gpt-5.6-layout -> server-selected quality vision model
@@ -23,8 +29,10 @@ FastAPI (app.py)
   `-- return result or chapter hash
 ```
 
-All chapter work happens in the API request process. There is no active queue,
-background job, object storage, or shared cache in the checked-in application.
+All chapter work happens in the API request process under one extraction lock.
+There is no active queue or shared cache in the checked-in application.
+`DATA_DIR` must therefore be a persistent volume and a single worker remains a
+deployment constraint.
 
 ## Components
 
@@ -32,6 +40,7 @@ background job, object storage, or shared cache in the checked-in application.
 | --- | --- | --- |
 | `app.py` | FastAPI application, routing, orchestration, CORS, logging | Active |
 | `utils.py` | HTML/image download, file discovery, JSON and image helpers | Active |
+| `ingestion.py` | Safe comic/PDF/image ingestion and content identity | Active |
 | `kumikolib.py`, `kcore/` | Bundled Kumiko page-layout algorithm and optional vision LLM detector | Active |
 | `feedback_service.py` | MySQL connection and feedback insert | Active for feedback endpoint |
 | `output.json` | Historical example output | Sample only |
@@ -49,6 +58,11 @@ images/<md5>/ (temporary during extraction)
 jsons/<md5>/
   kumiko.json
   metadata.json
+
+pages/<content-sha256>/
+  0001.webp
+  0002.webp
+  ...
 ```
 
 Downloaded pages use zero-padded sequential filenames and carry a `page_index`

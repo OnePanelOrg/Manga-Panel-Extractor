@@ -14,6 +14,7 @@ from chapter_contract import (
     chapter_cache_key,
     detector_options_for,
     read_metadata,
+    upload_cache_key,
     write_metadata,
 )
 
@@ -75,6 +76,15 @@ class ChapterContractTest(unittest.TestCase):
             chapter_cache_key(source_url, SegmentationMode.STANDARD),
             chapter_cache_key(source_url, SegmentationMode.GPT_5_6_LAYOUT),
         )
+
+    def test_uploaded_content_identity_is_provider_independent_and_mode_aware(self):
+        digest = "a" * 64
+
+        standard = upload_cache_key(digest, SegmentationMode.STANDARD)
+        premium = upload_cache_key(digest, SegmentationMode.GPT_5_6_LAYOUT)
+
+        self.assertEqual(len(standard), 64)
+        self.assertNotEqual(standard, premium)
 
     def test_provider_model_is_server_controlled(self):
         with patch.dict(

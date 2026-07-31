@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import os, json
+import re
 import shutil
 import threading
 from pathlib import Path
@@ -12,9 +13,10 @@ from logging.handlers import TimedRotatingFileHandler
 from uuid import uuid4
 
 from dotenv import load_dotenv
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 # project
@@ -33,8 +35,10 @@ from chapter_contract import (
     chapter_cache_key,
     detector_options_for,
     read_metadata,
+    upload_cache_key,
     write_metadata,
 )
+from ingestion import IngestionError, UploadSource, ingest_uploads
 
 load_dotenv()
 
@@ -42,8 +46,10 @@ app = FastAPI()
 DATA_DIR = Path(os.environ.get("DATA_DIR", "./data")).resolve()
 IMAGES_DIR = DATA_DIR / "images"
 JSONS_DIR = DATA_DIR / "jsons"
+PAGES_DIR = DATA_DIR / "pages"
 IMAGES_DIR.mkdir(parents=True, exist_ok=True)
 JSONS_DIR.mkdir(parents=True, exist_ok=True)
+PAGES_DIR.mkdir(parents=True, exist_ok=True)
 extraction_lock = threading.Lock()
 
 origins = [
@@ -183,6 +189,65 @@ def process_chapter(
     finally:
         shutil.rmtree(image_path, ignore_errors=True)
 
+
+def process_uploaded_chapter(
+    uploads: list[UploadFile],
+    mode: SegmentationMode = SegmentationMode.STANDARD,
+):
+    ingested = ingest_uploads(
+        UploadSource(upload.filename or "upload", upload.file)
+        for upload in uploads
+    )
+    try:
+        chapter_hash = upload_cache_key(ingested.content_digest, mode)
+        result_file = JSONS_DIR / chapter_hash / "kumiko.json"
+        stored_pages = PAGES_DIR / ingested.content_digest
+        if result_file.exists():
+            if not stored_pages.exists():
+                shutil.copytree(ingested.directory, stored_pages)
+            logger.info("uploaded chapter already processed")
+            return {"chapter_hash": chapter_hash, "cache_hit": True}
+
+        image_urls = {
+            page_name: {
+                "page_index": page_index,
+                "source_url": (
+                    f"/api/onepanel/v2/pages/{ingested.content_digest}/{page_name}"
+                ),
+            }
+            for page_index, page_name in enumerate(ingested.page_names, start=1)
+        }
+        save_file(image_urls, str(ingested.directory / "img_dict.json"))
+
+        detector = Kumiko(detector_options_for(mode))
+        info = detector.parse_dir(str(ingested.directory))
+        if not info["pages"]:
+            raise HTTPException(
+                status_code=422,
+                detail="No supported chapter images were found; result was not cached",
+            )
+
+        if not stored_pages.exists():
+            stored_pages.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copytree(
+                ingested.directory,
+                stored_pages,
+                ignore=shutil.ignore_patterns("img_dict.json"),
+            )
+
+        result_directory = result_file.parent
+        result_directory.mkdir(parents=True, exist_ok=True)
+        write_metadata(result_directory, mode)
+        save_file(info, str(result_file))
+        logger.info(
+            "uploaded chapter extracted: content_digest=%s chapter_hash=%s",
+            ingested.content_digest,
+            chapter_hash,
+        )
+        return {"chapter_hash": chapter_hash, "cache_hit": False}
+    finally:
+        ingested.cleanup()
+
 async def authorize_creation(
     mode: SegmentationMode,
     user_id: Optional[str],
@@ -220,6 +285,30 @@ async def post_chapter_v2(
 
     return result
 
+
+@app.post("/v2/chapter/upload")
+async def post_chapter_upload_v2(
+    files: list[UploadFile] = File(...),
+    segmentation_mode: SegmentationMode = Form(SegmentationMode.STANDARD),
+    user_id: Optional[str] = Depends(optional_user),
+):
+    await authorize_creation(segmentation_mode, user_id)
+    try:
+        return await run_in_threadpool(
+            run_extraction,
+            process_uploaded_chapter,
+            files,
+            segmentation_mode,
+        )
+    except IngestionError as error:
+        raise HTTPException(
+            status_code=error.status_code,
+            detail=str(error),
+        ) from error
+    finally:
+        for upload in files:
+            await upload.close()
+
 @app.get("/v2/chapter/{chapter_hash}")
 async def get_chapter(
     chapter_hash: str,
@@ -244,6 +333,24 @@ async def get_chapter(
         page["pageIndex"] = page_index
 
     return result
+
+
+@app.get("/v2/pages/{content_digest}/{page_name}")
+async def get_uploaded_page(content_digest: str, page_name: str):
+    if (
+        len(content_digest) != 64
+        or any(character not in "0123456789abcdef" for character in content_digest)
+        or not re.fullmatch(r"\d{4}\.webp", page_name)
+    ):
+        raise HTTPException(status_code=404, detail="Page not found")
+    page_path = PAGES_DIR / content_digest / page_name
+    if not page_path.is_file():
+        raise HTTPException(status_code=404, detail="Page not found")
+    return FileResponse(
+        page_path,
+        media_type="image/webp",
+        headers={"Cache-Control": "public, max-age=31536000, immutable"},
+    )
 
 
 @app.get("/v2/billing/status")

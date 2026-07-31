@@ -29,7 +29,7 @@ The repository includes:
 - a Dockerfile based on `python:3.10-slim`;
 - required OpenCV system libraries;
 - a single-worker Uvicorn start command bound to `${PORT:-8000}`;
-- `/data/images` and `/data/jsons` runtime directories; and
+- `/data/images`, `/data/jsons`, and `/data/pages` runtime directories; and
 - `DATA_DIR=/data`.
 
 There is no `railway.toml`, `railway.json`, Procfile, CI deployment workflow, or
@@ -37,6 +37,11 @@ production domain/service identifier in the repository. The Railway project
 dashboard is recorded above, but the health check, region, replicas, volume,
 environment variables, public domain, and billing controls must still be
 confirmed there.
+
+Comic uploads are sent directly from the browser to the Railway API. Confirm
+that Railway's request-size and request-duration limits accommodate
+`MAX_UPLOAD_BYTES`, and mount a persistent volume at `/data`; otherwise
+normalized uploaded pages and cached extraction results disappear on restart.
 
 ## Expected service configuration
 
