@@ -20,7 +20,7 @@ FastAPI (app.py)
   |     +-- safely read an archive, PDF, or loose images
   |     +-- normalize pages to lossless WebP
   |     +-- hash ordered decoded pixels
-  |     `-- reuse pages/<sha256>/ and mode-aware JSON when present
+  |     `-- delete all staged and normalized pages after building the response
   |
   +-- construct per-request Kumiko detector
   |     +-- standard -> local detector
@@ -31,8 +31,8 @@ FastAPI (app.py)
 
 All chapter work happens in the API request process under one extraction lock.
 There is no active queue or shared cache in the checked-in application.
-`DATA_DIR` must therefore be a persistent volume and a single worker remains a
-deployment constraint.
+`DATA_DIR` persists analysis JSON only; a single worker remains a deployment
+constraint.
 
 ## Components
 
@@ -59,10 +59,6 @@ jsons/<md5>/
   kumiko.json
   metadata.json
 
-pages/<content-sha256>/
-  0001.webp
-  0002.webp
-  ...
 ```
 
 Downloaded pages use zero-padded sequential filenames and carry a `page_index`
@@ -70,6 +66,13 @@ in `img_dict.json`. This preserves source HTML order through extraction. The
 whole image directory is removed after extraction, whether processing succeeds
 or fails. Legacy results without an explicit index use natural numeric filename
 ordering.
+
+Uploads follow the same deletion rule. Archives, PDFs, loose images, extracted
+files, and normalized WebP pages live only in a request-scoped temporary
+directory. The response embeds pages as transient data URLs for the current
+browser session, while `kumiko.json` stores only `upload://` placeholders and
+layout data. A later read requires re-uploading the source; its content hash can
+still reuse the cached analysis.
 
 The HTTP API stores and returns `kumiko.json`. Older deployments also generated
 `panel_extracted.json` using `PanelExtractor`; that duplicate output is no

@@ -50,9 +50,10 @@ Comic uploads are sent directly from the browser to the Railway API. Railway
 documents a maximum HTTP request duration of 15 minutes, while the frontend
 times uploads out after 10 minutes. Railway does not publish a maximum HTTP
 request-body size, so the configured 250 MB upload ceiling should be monitored
-with real uploads. The current 500 MB volume is smaller than the 750 MB expanded
-input ceiling; live-resize it to the Hobby plan's current 5 GB default before
-relying on uploaded-page retention at scale.
+with real uploads. The volume stores cached JSON only. Uploaded and downloaded
+page data is request-scoped and deleted immediately after analysis, so the
+750 MB expanded input ceiling applies to ephemeral container storage rather
+than persistent volume capacity.
 
 ## Expected service configuration
 

@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import logging
 import os, json
-import re
+import base64
+import copy
 import shutil
 import threading
 from pathlib import Path
@@ -16,7 +17,6 @@ from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 # project
@@ -46,10 +46,8 @@ app = FastAPI()
 DATA_DIR = Path(os.environ.get("DATA_DIR", "./data")).resolve()
 IMAGES_DIR = DATA_DIR / "images"
 JSONS_DIR = DATA_DIR / "jsons"
-PAGES_DIR = DATA_DIR / "pages"
 IMAGES_DIR.mkdir(parents=True, exist_ok=True)
 JSONS_DIR.mkdir(parents=True, exist_ok=True)
-PAGES_DIR.mkdir(parents=True, exist_ok=True)
 extraction_lock = threading.Lock()
 
 origins = [
@@ -201,50 +199,64 @@ def process_uploaded_chapter(
     try:
         chapter_hash = upload_cache_key(ingested.content_digest, mode)
         result_file = JSONS_DIR / chapter_hash / "kumiko.json"
-        stored_pages = PAGES_DIR / ingested.content_digest
         if result_file.exists():
-            if not stored_pages.exists():
-                shutil.copytree(ingested.directory, stored_pages)
             logger.info("uploaded chapter already processed")
-            return {"chapter_hash": chapter_hash, "cache_hit": True}
-
-        image_urls = {
-            page_name: {
-                "page_index": page_index,
-                "source_url": (
-                    f"/api/onepanel/v2/pages/{ingested.content_digest}/{page_name}"
-                ),
+            with result_file.open() as file:
+                info = json.load(file)
+            cache_hit = True
+        else:
+            image_urls = {
+                page_name: {
+                    "page_index": page_index,
+                    "source_url": (
+                        f"upload://{ingested.content_digest}/{page_name}"
+                    ),
+                }
+                for page_index, page_name in enumerate(ingested.page_names, start=1)
             }
-            for page_index, page_name in enumerate(ingested.page_names, start=1)
-        }
-        save_file(image_urls, str(ingested.directory / "img_dict.json"))
+            save_file(image_urls, str(ingested.directory / "img_dict.json"))
 
-        detector = Kumiko(detector_options_for(mode))
-        info = detector.parse_dir(str(ingested.directory))
-        if not info["pages"]:
+            detector = Kumiko(detector_options_for(mode))
+            info = detector.parse_dir(str(ingested.directory))
+            if not info["pages"]:
+                raise HTTPException(
+                    status_code=422,
+                    detail="No supported chapter images were found; result was not cached",
+                )
+
+            result_directory = result_file.parent
+            result_directory.mkdir(parents=True, exist_ok=True)
+            write_metadata(result_directory, mode)
+            # The cached artifact contains analysis only. Raw or normalized page
+            # bytes must never be persisted after this request.
+            save_file(info, str(result_file))
+            cache_hit = False
+            logger.info(
+                "uploaded chapter extracted: content_digest=%s chapter_hash=%s",
+                ingested.content_digest,
+                chapter_hash,
+            )
+
+        response_chapter = copy.deepcopy(info)
+        response_chapter["pages"].sort(key=page_sort_key)
+        if len(response_chapter["pages"]) != len(ingested.page_names):
             raise HTTPException(
-                status_code=422,
-                detail="No supported chapter images were found; result was not cached",
+                status_code=500,
+                detail="The analyzed chapter could not be matched to its pages.",
             )
+        for page, page_name in zip(
+            response_chapter["pages"],
+            ingested.page_names,
+        ):
+            page_path = ingested.directory / page_name
+            encoded = base64.b64encode(page_path.read_bytes()).decode("ascii")
+            page["image"] = f"data:image/webp;base64,{encoded}"
 
-        if not stored_pages.exists():
-            stored_pages.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copytree(
-                ingested.directory,
-                stored_pages,
-                ignore=shutil.ignore_patterns("img_dict.json"),
-            )
-
-        result_directory = result_file.parent
-        result_directory.mkdir(parents=True, exist_ok=True)
-        write_metadata(result_directory, mode)
-        save_file(info, str(result_file))
-        logger.info(
-            "uploaded chapter extracted: content_digest=%s chapter_hash=%s",
-            ingested.content_digest,
-            chapter_hash,
-        )
-        return {"chapter_hash": chapter_hash, "cache_hit": False}
+        return {
+            "chapter_hash": chapter_hash,
+            "chapter": response_chapter,
+            "cache_hit": cache_hit,
+        }
     finally:
         ingested.cleanup()
 
@@ -327,30 +339,23 @@ async def get_chapter(
     authorize_retrieval(metadata, user_id)
     with result_file.open() as file:
         result = json.load(file)
+    if any(
+        str(page.get("image", "")).startswith("upload://")
+        for page in result.get("pages", [])
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "Uploaded chapters are session-only. Re-upload the source "
+                "to read it again."
+            ),
+        )
 
     result["pages"].sort(key=page_sort_key)
     for page_index, page in enumerate(result["pages"], start=1):
         page["pageIndex"] = page_index
 
     return result
-
-
-@app.get("/v2/pages/{content_digest}/{page_name}")
-async def get_uploaded_page(content_digest: str, page_name: str):
-    if (
-        len(content_digest) != 64
-        or any(character not in "0123456789abcdef" for character in content_digest)
-        or not re.fullmatch(r"\d{4}\.webp", page_name)
-    ):
-        raise HTTPException(status_code=404, detail="Page not found")
-    page_path = PAGES_DIR / content_digest / page_name
-    if not page_path.is_file():
-        raise HTTPException(status_code=404, detail="Page not found")
-    return FileResponse(
-        page_path,
-        media_type="image/webp",
-        headers={"Cache-Control": "public, max-age=31536000, immutable"},
-    )
 
 
 @app.get("/v2/billing/status")

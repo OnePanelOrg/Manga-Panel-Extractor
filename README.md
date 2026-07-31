@@ -50,7 +50,6 @@ Interactive API documentation is available at
 | `POST` | `/v2/chapter` | Process a chapter and return its hash |
 | `POST` | `/v2/chapter/upload` | Process uploaded comic media and return its hash |
 | `GET` | `/v2/chapter/{chapter_hash}` | Read a cached Kumiko result |
-| `GET` | `/v2/pages/{content_digest}/{page_name}` | Read a normalized uploaded page |
 | `GET` | `/v2/billing/status` | Read the authenticated user's subscription |
 | `POST` | `/v2/billing/checkout` | Create a Stripe subscription Checkout |
 | `POST` | `/v2/billing/portal` | Open Stripe's customer billing portal |
@@ -84,7 +83,10 @@ The upload endpoint accepts multipart `files` plus an optional
 `segmentation_mode`. Send one container/PDF or one or more page images. Archive
 paths are never extracted directly, and the importer enforces compressed,
 expanded, per-page, page-count, pixel-count, and compression-ratio limits.
-Normalized pages are stored once across segmentation modes.
+Normalized pages are request-scoped and deleted immediately after analysis.
+Only the layout JSON is cached. The upload response contains transient data
+URLs for the current browser session; reopening it requires re-uploading.
+An identical re-upload reuses the cached JSON and skips panel analysis.
 
 Feedback body:
 
@@ -127,8 +129,9 @@ schema are documented in [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 
 Do not commit `.env`; it is ignored by Git.
 
-`DATA_DIR` must be persistent in production; uploaded pages are stored under
-`pages/` and cached results under `jsons/`. Upload limits can be adjusted with
+`DATA_DIR` must be persistent in production for cached analysis JSON under
+`jsons/`. Downloaded, extracted, and normalized pages are temporary and are
+deleted after each request. Upload limits can be adjusted with
 `MAX_UPLOAD_BYTES`, `MAX_EXPANDED_BYTES`, `MAX_PAGE_BYTES`,
 `MAX_CHAPTER_IMAGES`, `MAX_IMAGE_PIXELS`, and `MAX_ARCHIVE_RATIO`.
 

@@ -19,15 +19,12 @@ class ChapterProcessingTest(unittest.TestCase):
         data_directory = Path(self.temporary_directory.name)
         self.images_directory = data_directory / "images"
         self.results_directory = data_directory / "jsons"
-        self.pages_directory = data_directory / "pages"
         self.images_directory.mkdir()
         self.results_directory.mkdir()
-        self.pages_directory.mkdir()
         self.directories = patch.multiple(
             app,
             IMAGES_DIR=self.images_directory,
             JSONS_DIR=self.results_directory,
-            PAGES_DIR=self.pages_directory,
         )
         self.directories.start()
 
@@ -95,14 +92,18 @@ class ChapterProcessingTest(unittest.TestCase):
         self.assertEqual(download_images.call_count, 2)
 
     @patch("app.Kumiko")
-    def test_uploaded_chapter_uses_content_cache_and_persists_pages(self, kumiko):
+    def test_uploaded_chapter_reuses_json_and_deletes_all_page_files(self, kumiko):
         image = io.BytesIO()
         Image.new("RGB", (24, 32), "white").save(image, format="PNG")
 
         detector = MagicMock()
         detector.parse_dir.return_value = {
             "pageCount": 1,
-            "pages": [{"filename": "0001.webp", "panels": [{"path": "0 0"}]}],
+            "pages": [{
+                "filename": "0001.webp",
+                "image": "upload://digest/0001.webp",
+                "panels": [{"path": "0 0"}],
+            }],
         }
         kumiko.return_value = detector
 
@@ -122,8 +123,16 @@ class ChapterProcessingTest(unittest.TestCase):
         self.assertTrue(second["cache_hit"])
         self.assertEqual(first["chapter_hash"], second["chapter_hash"])
         self.assertEqual(detector.parse_dir.call_count, 1)
-        stored_pages = list(self.pages_directory.glob("*/0001.webp"))
-        self.assertEqual(len(stored_pages), 1)
+        self.assertTrue(
+            first["chapter"]["pages"][0]["image"].startswith(
+                "data:image/webp;base64,"
+            )
+        )
+        self.assertTrue(
+            second["chapter"]["pages"][0]["image"].startswith(
+                "data:image/webp;base64,"
+            )
+        )
         result = json.loads(
             (
                 self.results_directory
@@ -132,6 +141,22 @@ class ChapterProcessingTest(unittest.TestCase):
             ).read_text()
         )
         self.assertEqual(result["pageCount"], 1)
+        self.assertTrue(result["pages"][0]["image"].startswith("upload://"))
+        self.assertNotIn("data:image", json.dumps(result))
+        self.assertEqual(list(self.results_directory.parent.rglob("*.webp")), [])
+
+    def test_cached_upload_requires_reupload_for_later_retrieval(self):
+        chapter_hash = "uploaded"
+        result_directory = self.results_directory / chapter_hash
+        result_directory.mkdir()
+        (result_directory / "kumiko.json").write_text(json.dumps({
+            "pages": [{"image": "upload://digest/0001.webp"}],
+        }))
+
+        with self.assertRaises(HTTPException) as raised:
+            asyncio.run(app.get_chapter(chapter_hash, None))
+
+        self.assertEqual(raised.exception.status_code, 409)
 
     def test_missing_result_is_not_found(self):
         chapter_hash = chapter_cache_key(
