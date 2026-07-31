@@ -1,4 +1,5 @@
 import asyncio
+import io
 import json
 import tempfile
 import unittest
@@ -6,6 +7,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from fastapi import HTTPException
+from PIL import Image
 
 import app
 from chapter_contract import SegmentationMode, chapter_cache_key
@@ -88,6 +90,120 @@ class ChapterProcessingTest(unittest.TestCase):
 
         self.assertNotEqual(standard["chapter_hash"], premium["chapter_hash"])
         self.assertEqual(download_images.call_count, 2)
+
+    @patch("app.Kumiko")
+    def test_uploaded_chapter_reuses_json_and_deletes_all_page_files(self, kumiko):
+        image = io.BytesIO()
+        Image.new("RGB", (24, 32), "white").save(image, format="PNG")
+
+        detector = MagicMock()
+        detector.parse_dir.return_value = {
+            "pageCount": 1,
+            "pages": [{
+                "filename": "0001.webp",
+                "image": "upload://digest/0001.webp",
+                "panels": [{"path": "0 0"}],
+            }],
+        }
+        kumiko.return_value = detector
+
+        def upload():
+            return MagicMock(filename="page.png", file=io.BytesIO(image.getvalue()))
+
+        temporary_roots = []
+        real_ingest_uploads = app.ingest_uploads
+
+        def capture_ingestion(*args, **kwargs):
+            chapter = real_ingest_uploads(*args, **kwargs)
+            temporary_roots.append(chapter.directory.parent)
+            return chapter
+
+        with patch("app.ingest_uploads", side_effect=capture_ingestion):
+            first = app.process_uploaded_chapter(
+                [upload()],
+                SegmentationMode.STANDARD,
+            )
+            second = app.process_uploaded_chapter(
+                [upload()],
+                SegmentationMode.STANDARD,
+            )
+
+        self.assertFalse(first["cache_hit"])
+        self.assertTrue(second["cache_hit"])
+        self.assertEqual(first["chapter_hash"], second["chapter_hash"])
+        self.assertEqual(detector.parse_dir.call_count, 1)
+        self.assertTrue(
+            first["chapter"]["pages"][0]["image"].startswith(
+                "data:image/webp;base64,"
+            )
+        )
+        self.assertTrue(
+            second["chapter"]["pages"][0]["image"].startswith(
+                "data:image/webp;base64,"
+            )
+        )
+        result = json.loads(
+            (
+                self.results_directory
+                / first["chapter_hash"]
+                / "kumiko.json"
+            ).read_text()
+        )
+        self.assertEqual(result["pageCount"], 1)
+        self.assertTrue(result["pages"][0]["image"].startswith("upload://"))
+        self.assertNotIn("data:image", json.dumps(result))
+        self.assertTrue(temporary_roots)
+        self.assertTrue(all(not root.exists() for root in temporary_roots))
+
+    @patch("app.Kumiko")
+    def test_page_count_mismatch_is_not_cached(self, kumiko):
+        image = io.BytesIO()
+        Image.new("RGB", (24, 32), "white").save(image, format="PNG")
+        detector = MagicMock()
+        detector.parse_dir.return_value = {
+            "pageCount": 1,
+            "pages": [{
+                "filename": "0001.webp",
+                "image": "upload://digest/0001.webp",
+                "panels": [{"path": "0 0"}],
+            }],
+        }
+        kumiko.return_value = detector
+        uploads = [
+            MagicMock(filename=f"{index}.png", file=io.BytesIO(image.getvalue()))
+            for index in (1, 2)
+        ]
+
+        with self.assertRaises(HTTPException) as raised:
+            app.process_uploaded_chapter(uploads, SegmentationMode.STANDARD)
+
+        self.assertEqual(raised.exception.status_code, 422)
+        self.assertEqual(list(self.results_directory.rglob("kumiko.json")), [])
+
+    def test_cached_upload_requires_reupload_for_later_retrieval(self):
+        chapter_hash = "uploaded"
+        result_directory = self.results_directory / chapter_hash
+        result_directory.mkdir()
+        (result_directory / "kumiko.json").write_text(json.dumps({
+            "pages": [{"image": "upload://digest/0001.webp"}],
+        }))
+
+        with self.assertRaises(HTTPException) as raised:
+            asyncio.run(app.get_chapter(chapter_hash, None))
+
+        self.assertEqual(raised.exception.status_code, 409)
+
+    def test_concurrent_upload_is_rejected_without_running_extractor(self):
+        extractor = MagicMock()
+        app.extraction_lock.acquire()
+        try:
+            with self.assertRaises(HTTPException) as raised:
+                app.run_upload_extraction(extractor, [])
+        finally:
+            app.extraction_lock.release()
+
+        self.assertEqual(raised.exception.status_code, 429)
+        extractor.assert_not_called()
 
     def test_missing_result_is_not_found(self):
         chapter_hash = chapter_cache_key(

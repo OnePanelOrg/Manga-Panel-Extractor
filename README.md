@@ -1,7 +1,7 @@
 # Manga Panel Extractor
 
-Python service used by OnePanel to download the pages of a manga chapter, detect
-panel geometry, and return reader-layout JSON.
+Python service used by OnePanel to download or import the pages of a manga
+chapter, detect panel geometry, and return reader-layout JSON.
 
 This repository is the backend currently understood to be deployed on Railway.
 The deployment and billing facts supplied by the project owner are recorded in
@@ -11,7 +11,7 @@ be verified there.
 
 ## What it does
 
-Given a chapter URL, the service:
+Given a chapter URL or uploaded comic, the service:
 
 1. downloads matching PNG images from the chapter HTML;
 2. stores the original image URLs alongside the temporary downloads;
@@ -23,6 +23,10 @@ Given a chapter URL, the service:
 The chapter hash is the MD5 of the chapter URL after its query string is
 removed. Processing and caching are synchronous and local to the service
 instance.
+
+Uploads accept one CBZ, CBR, ZIP, RAR, or PDF, or a set of loose page images.
+Their cache identity is a SHA-256 digest of the ordered decoded page pixels, so
+container metadata and image encoding do not change chapter identity.
 
 ## API
 
@@ -44,6 +48,7 @@ Interactive API documentation is available at
 | --- | --- | --- |
 | `GET` | `/` | Basic process check; returns service status |
 | `POST` | `/v2/chapter` | Process a chapter and return its hash |
+| `POST` | `/v2/chapter/upload` | Process uploaded comic media and return its hash |
 | `GET` | `/v2/chapter/{chapter_hash}` | Read a cached Kumiko result |
 | `GET` | `/v2/billing/status` | Read the authenticated user's subscription |
 | `POST` | `/v2/billing/checkout` | Create a Stripe subscription Checkout |
@@ -67,12 +72,22 @@ Creation and retrieval access:
 
 | Mode | Create | Retrieve |
 | --- | --- | --- |
-| `standard` | Anonymous or signed in; no subscription lookup | Public by unguessable chapter hash |
+| `standard` URL | Anonymous or signed in; no subscription lookup | Public by unguessable chapter hash |
+| `standard` upload | Signed-in account | Re-upload required after the browser session |
 | `gpt-5.6-layout` | Signed-in active Pro subscriber | Any signed-in account |
 
 Standard and GPT-5.6 Layout have different cache identities for the same
 normalized source URL. Standard retains the historical MD5 identity, and cached
 results without `metadata.json` are interpreted as public Standard results.
+
+The upload endpoint accepts multipart `files` plus an optional
+`segmentation_mode`. Send one container/PDF or one or more page images. Archive
+paths are never extracted directly, and the importer enforces compressed,
+expanded, per-page, page-count, pixel-count, and compression-ratio limits.
+Normalized pages are request-scoped and deleted immediately after analysis.
+Only the layout JSON is cached. The upload response contains transient data
+URLs for the current browser session; reopening it requires re-uploading.
+An identical re-upload reuses the cached JSON and skips panel analysis.
 
 Feedback body:
 
@@ -114,6 +129,12 @@ Railway MySQL reference-variable mappings and the required `feedback` table
 schema are documented in [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 
 Do not commit `.env`; it is ignored by Git.
+
+`DATA_DIR` must be persistent in production for cached analysis JSON under
+`jsons/`. Downloaded, extracted, and normalized pages are temporary and are
+deleted after each request. Upload limits can be adjusted with
+`MAX_UPLOAD_BYTES`, `MAX_EXPANDED_BYTES`, `MAX_PAGE_BYTES`,
+`MAX_CHAPTER_IMAGES`, `MAX_IMAGE_PIXELS`, and `MAX_ARCHIVE_RATIO`.
 
 The provider model used by GPT-5.6 Layout is controlled only by the server
 environment:

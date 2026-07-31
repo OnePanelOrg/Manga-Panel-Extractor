@@ -33,10 +33,27 @@ The repository includes:
 - `DATA_DIR=/data`.
 
 There is no `railway.toml`, `railway.json`, Procfile, CI deployment workflow, or
-production domain/service identifier in the repository. The Railway project
-dashboard is recorded above, but the health check, region, replicas, volume,
-environment variables, public domain, and billing controls must still be
-confirmed there.
+production domain/service identifier in the repository.
+
+The production service configuration was verified through the Railway CLI on
+2026-07-31:
+
+- project `onepanel`, production environment;
+- service `Manga-Panel-Extractor`, Hobby plan, one `us-west2` replica;
+- Railway domain
+  `manga-panel-extractor-production.up.railway.app`;
+- Dockerfile build from the `master` branch;
+- persistent volume `manga-panel-extractor-volume`, mounted at `/data`, ready,
+  with 500 MB capacity and approximately 77 MB used at verification time.
+
+Comic uploads are sent directly from the browser to the Railway API. Railway
+documents a maximum HTTP request duration of 15 minutes, while the frontend
+times uploads out after 10 minutes. Railway does not publish a maximum HTTP
+request-body size, so the configured 250 MB upload ceiling should be monitored
+with real uploads. The volume stores cached JSON only. Uploaded and downloaded
+page data is request-scoped and deleted immediately after analysis, so the
+750 MB expanded input ceiling applies to ephemeral container storage rather
+than persistent volume capacity.
 
 ## Expected service configuration
 
@@ -135,13 +152,14 @@ Deploy the API before the freemium frontend. After the API deployment, verify in
 this order:
 
 1. Existing legacy chapter hashes still retrieve as public Standard chapters.
-2. Anonymous Standard creation and retrieval succeed.
-3. Standard and GPT-5.6 Layout produce distinct hashes for the same source URL.
-4. Signed-out and free-account premium creation is rejected before extraction.
-5. Active Pro premium creation uses the configured server quality model.
-6. A signed-in free account can retrieve a premium result, while an anonymous
+2. Anonymous Standard URL creation and retrieval succeed.
+3. Comic upload requires an authenticated account.
+4. Standard and GPT-5.6 Layout produce distinct hashes for the same source URL.
+5. Signed-out and free-account premium creation is rejected before extraction.
+6. Active Pro premium creation uses the configured server quality model.
+7. A signed-in free account can retrieve a premium result, while an anonymous
    caller cannot.
-7. Deploy the frontend, then verify upgrade and Checkout continuation flows.
+8. Deploy the frontend, then verify upgrade and Checkout continuation flows.
 
 In Railway, record or verify:
 

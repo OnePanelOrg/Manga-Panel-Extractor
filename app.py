@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import logging
 import os, json
+import base64
+import copy
 import shutil
 import threading
 from pathlib import Path
@@ -12,7 +14,7 @@ from logging.handlers import TimedRotatingFileHandler
 from uuid import uuid4
 
 from dotenv import load_dotenv
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -33,8 +35,10 @@ from chapter_contract import (
     chapter_cache_key,
     detector_options_for,
     read_metadata,
+    upload_cache_key,
     write_metadata,
 )
+from ingestion import IngestionError, UploadSource, ingest_uploads
 
 load_dotenv()
 
@@ -183,6 +187,93 @@ def process_chapter(
     finally:
         shutil.rmtree(image_path, ignore_errors=True)
 
+
+def process_uploaded_chapter(
+    uploads: list[UploadFile],
+    mode: SegmentationMode = SegmentationMode.STANDARD,
+):
+    ingested = ingest_uploads(
+        UploadSource(upload.filename or "upload", upload.file)
+        for upload in uploads
+    )
+    try:
+        chapter_hash = upload_cache_key(ingested.content_digest, mode)
+        result_file = JSONS_DIR / chapter_hash / "kumiko.json"
+        cache_hit = result_file.exists()
+        if cache_hit:
+            logger.info("uploaded chapter already processed")
+            with result_file.open() as file:
+                info = json.load(file)
+            if len(info.get("pages", [])) != len(ingested.page_names):
+                logger.warning("discarding invalid uploaded chapter cache")
+                shutil.rmtree(result_file.parent, ignore_errors=True)
+                cache_hit = False
+
+        if not cache_hit:
+            image_urls = {
+                page_name: {
+                    "page_index": page_index,
+                    "source_url": (
+                        f"upload://{ingested.content_digest}/{page_name}"
+                    ),
+                }
+                for page_index, page_name in enumerate(ingested.page_names, start=1)
+            }
+            save_file(image_urls, str(ingested.directory / "img_dict.json"))
+
+            detector = Kumiko(detector_options_for(mode))
+            info = detector.parse_dir(str(ingested.directory))
+            if not info["pages"]:
+                raise HTTPException(
+                    status_code=422,
+                    detail="No supported chapter images were found; result was not cached",
+                )
+            info["pages"].sort(key=page_sort_key)
+            if len(info["pages"]) != len(ingested.page_names):
+                raise HTTPException(
+                    status_code=422,
+                    detail=(
+                        "One or more normalized pages could not be analyzed; "
+                        "result was not cached."
+                    ),
+                )
+
+            result_directory = result_file.parent
+            result_directory.mkdir(parents=True, exist_ok=True)
+            write_metadata(result_directory, mode)
+            # The cached artifact contains analysis only. Raw or normalized page
+            # bytes must never be persisted after this request.
+            save_file(info, str(result_file))
+            cache_hit = False
+            logger.info(
+                "uploaded chapter extracted: content_digest=%s chapter_hash=%s",
+                ingested.content_digest,
+                chapter_hash,
+            )
+
+        response_chapter = copy.deepcopy(info)
+        response_chapter["pages"].sort(key=page_sort_key)
+        if len(response_chapter["pages"]) != len(ingested.page_names):
+            raise HTTPException(
+                status_code=500,
+                detail="The analyzed chapter could not be matched to its pages.",
+            )
+        for page, page_name in zip(
+            response_chapter["pages"],
+            ingested.page_names,
+        ):
+            page_path = ingested.directory / page_name
+            encoded = base64.b64encode(page_path.read_bytes()).decode("ascii")
+            page["image"] = f"data:image/webp;base64,{encoded}"
+
+        return {
+            "chapter_hash": chapter_hash,
+            "chapter": response_chapter,
+            "cache_hit": cache_hit,
+        }
+    finally:
+        ingested.cleanup()
+
 async def authorize_creation(
     mode: SegmentationMode,
     user_id: Optional[str],
@@ -220,6 +311,30 @@ async def post_chapter_v2(
 
     return result
 
+
+@app.post("/v2/chapter/upload")
+async def post_chapter_upload_v2(
+    files: list[UploadFile] = File(...),
+    segmentation_mode: SegmentationMode = Form(SegmentationMode.STANDARD),
+    user_id: str = Depends(require_user),
+):
+    await authorize_creation(segmentation_mode, user_id)
+    try:
+        return await run_in_threadpool(
+            run_upload_extraction,
+            process_uploaded_chapter,
+            files,
+            segmentation_mode,
+        )
+    except IngestionError as error:
+        raise HTTPException(
+            status_code=error.status_code,
+            detail=str(error),
+        ) from error
+    finally:
+        for upload in files:
+            await upload.close()
+
 @app.get("/v2/chapter/{chapter_hash}")
 async def get_chapter(
     chapter_hash: str,
@@ -238,6 +353,17 @@ async def get_chapter(
     authorize_retrieval(metadata, user_id)
     with result_file.open() as file:
         result = json.load(file)
+    if any(
+        str(page.get("image", "")).startswith("upload://")
+        for page in result.get("pages", [])
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "Uploaded chapters are session-only. Re-upload the source "
+                "to read it again."
+            ),
+        )
 
     result["pages"].sort(key=page_sort_key)
     for page_index, page in enumerate(result["pages"], start=1):
@@ -269,6 +395,20 @@ def run_extraction(extractor, chapter_url, *args):
     # in the initial single-instance deployment.
     with extraction_lock:
         return extractor(chapter_url, *args)
+
+
+def run_upload_extraction(extractor, uploads, *args):
+    # Do not let concurrent upload work queue enough blocked threads to starve
+    # health, billing, and chapter-retrieval requests.
+    if not extraction_lock.acquire(blocking=False):
+        raise HTTPException(
+            status_code=429,
+            detail="Another chapter is being processed. Please try again shortly.",
+        )
+    try:
+        return extractor(uploads, *args)
+    finally:
+        extraction_lock.release()
 
 @app.post("/v2/feedback")
 def post_feedback(data: dict):
