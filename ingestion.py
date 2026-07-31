@@ -121,21 +121,17 @@ def _zip_pages(path: Path) -> list[tuple[str, bytes]]:
         members.sort(key=lambda member: natural_sort_key(member.filename))
         _validate_page_count(len(members))
         for member in members:
-            expanded += member.file_size
+            with archive.open(member) as page:
+                data = _read_limited(page, MAX_PAGE_BYTES, member.filename)
+            expanded += len(data)
             if expanded > MAX_EXPANDED_BYTES:
                 raise IngestionError("The archive expands beyond the safety limit.", 413)
-            if member.file_size > MAX_PAGE_BYTES:
-                raise IngestionError(f"{member.filename} exceeds the page size limit.", 413)
             if (
                 member.compress_size > 0
-                and member.file_size / member.compress_size > MAX_ARCHIVE_RATIO
+                and len(data) / member.compress_size > MAX_ARCHIVE_RATIO
             ):
                 raise IngestionError("The archive has an unsafe compression ratio.", 400)
-            with archive.open(member) as page:
-                pages.append((
-                    _safe_filename(member.filename),
-                    _read_limited(page, MAX_PAGE_BYTES, member.filename),
-                ))
+            pages.append((_safe_filename(member.filename), data))
     return pages
 
 
@@ -155,30 +151,23 @@ def _rar_pages(path: Path) -> list[tuple[str, bytes]]:
         expanded = 0
         with archive:
             for member in members:
-                expanded += member.file_size
+                with archive.open(member) as page:
+                    data = _read_limited(page, MAX_PAGE_BYTES, member.filename)
+                expanded += len(data)
                 if expanded > MAX_EXPANDED_BYTES:
                     raise IngestionError(
                         "The archive expands beyond the safety limit.",
                         413,
                     )
-                if member.file_size > MAX_PAGE_BYTES:
-                    raise IngestionError(
-                        f"{member.filename} exceeds the page size limit.",
-                        413,
-                    )
                 if (
                     member.compress_size > 0
-                    and member.file_size / member.compress_size > MAX_ARCHIVE_RATIO
+                    and len(data) / member.compress_size > MAX_ARCHIVE_RATIO
                 ):
                     raise IngestionError(
                         "The archive has an unsafe compression ratio.",
                         400,
                     )
-                with archive.open(member) as page:
-                    pages.append((
-                        _safe_filename(member.filename),
-                        _read_limited(page, MAX_PAGE_BYTES, member.filename),
-                    ))
+                pages.append((_safe_filename(member.filename), data))
         return pages
     except IngestionError:
         raise

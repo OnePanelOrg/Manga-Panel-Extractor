@@ -29,7 +29,7 @@ The repository includes:
 - a Dockerfile based on `python:3.10-slim`;
 - required OpenCV system libraries;
 - a single-worker Uvicorn start command bound to `${PORT:-8000}`;
-- `/data/images`, `/data/jsons`, and `/data/pages` runtime directories; and
+- `/data/images` and `/data/jsons` runtime directories; and
 - `DATA_DIR=/data`.
 
 There is no `railway.toml`, `railway.json`, Procfile, CI deployment workflow, or
@@ -152,13 +152,14 @@ Deploy the API before the freemium frontend. After the API deployment, verify in
 this order:
 
 1. Existing legacy chapter hashes still retrieve as public Standard chapters.
-2. Anonymous Standard creation and retrieval succeed.
-3. Standard and GPT-5.6 Layout produce distinct hashes for the same source URL.
-4. Signed-out and free-account premium creation is rejected before extraction.
-5. Active Pro premium creation uses the configured server quality model.
-6. A signed-in free account can retrieve a premium result, while an anonymous
+2. Anonymous Standard URL creation and retrieval succeed.
+3. Comic upload requires an authenticated account.
+4. Standard and GPT-5.6 Layout produce distinct hashes for the same source URL.
+5. Signed-out and free-account premium creation is rejected before extraction.
+6. Active Pro premium creation uses the configured server quality model.
+7. A signed-in free account can retrieve a premium result, while an anonymous
    caller cannot.
-7. Deploy the frontend, then verify upgrade and Checkout continuation flows.
+8. Deploy the frontend, then verify upgrade and Checkout continuation flows.
 
 In Railway, record or verify:
 

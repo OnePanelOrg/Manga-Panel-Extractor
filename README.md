@@ -72,7 +72,8 @@ Creation and retrieval access:
 
 | Mode | Create | Retrieve |
 | --- | --- | --- |
-| `standard` | Anonymous or signed in; no subscription lookup | Public by unguessable chapter hash |
+| `standard` URL | Anonymous or signed in; no subscription lookup | Public by unguessable chapter hash |
+| `standard` upload | Signed-in account | Re-upload required after the browser session |
 | `gpt-5.6-layout` | Signed-in active Pro subscriber | Any signed-in account |
 
 Standard and GPT-5.6 Layout have different cache identities for the same

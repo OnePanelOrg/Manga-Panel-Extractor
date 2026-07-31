@@ -111,6 +111,17 @@ class UploadIngestionTest(unittest.TestCase):
                     UploadSource("chapter.cbz", io.BytesIO(archive)),
                 ])
 
+    def test_enforces_cumulative_limit_from_bytes_actually_read(self):
+        archive = zip_bytes([
+            ("1.png", image_bytes("white")),
+            ("2.png", image_bytes("black")),
+        ])
+        with patch("ingestion.MAX_EXPANDED_BYTES", len(image_bytes("white"))):
+            with self.assertRaisesRegex(IngestionError, "safety limit"):
+                ingest_uploads([
+                    UploadSource("chapter.cbz", io.BytesIO(archive)),
+                ])
+
     def test_natural_sort_handles_nested_numeric_names(self):
         names = ["book/10.png", "book/2.png", "book/1.png"]
         self.assertEqual(

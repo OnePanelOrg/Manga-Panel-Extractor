@@ -199,12 +199,17 @@ def process_uploaded_chapter(
     try:
         chapter_hash = upload_cache_key(ingested.content_digest, mode)
         result_file = JSONS_DIR / chapter_hash / "kumiko.json"
-        if result_file.exists():
+        cache_hit = result_file.exists()
+        if cache_hit:
             logger.info("uploaded chapter already processed")
             with result_file.open() as file:
                 info = json.load(file)
-            cache_hit = True
-        else:
+            if len(info.get("pages", [])) != len(ingested.page_names):
+                logger.warning("discarding invalid uploaded chapter cache")
+                shutil.rmtree(result_file.parent, ignore_errors=True)
+                cache_hit = False
+
+        if not cache_hit:
             image_urls = {
                 page_name: {
                     "page_index": page_index,
@@ -222,6 +227,15 @@ def process_uploaded_chapter(
                 raise HTTPException(
                     status_code=422,
                     detail="No supported chapter images were found; result was not cached",
+                )
+            info["pages"].sort(key=page_sort_key)
+            if len(info["pages"]) != len(ingested.page_names):
+                raise HTTPException(
+                    status_code=422,
+                    detail=(
+                        "One or more normalized pages could not be analyzed; "
+                        "result was not cached."
+                    ),
                 )
 
             result_directory = result_file.parent
@@ -302,12 +316,12 @@ async def post_chapter_v2(
 async def post_chapter_upload_v2(
     files: list[UploadFile] = File(...),
     segmentation_mode: SegmentationMode = Form(SegmentationMode.STANDARD),
-    user_id: Optional[str] = Depends(optional_user),
+    user_id: str = Depends(require_user),
 ):
     await authorize_creation(segmentation_mode, user_id)
     try:
         return await run_in_threadpool(
-            run_extraction,
+            run_upload_extraction,
             process_uploaded_chapter,
             files,
             segmentation_mode,
@@ -381,6 +395,20 @@ def run_extraction(extractor, chapter_url, *args):
     # in the initial single-instance deployment.
     with extraction_lock:
         return extractor(chapter_url, *args)
+
+
+def run_upload_extraction(extractor, uploads, *args):
+    # Do not let concurrent upload work queue enough blocked threads to starve
+    # health, billing, and chapter-retrieval requests.
+    if not extraction_lock.acquire(blocking=False):
+        raise HTTPException(
+            status_code=429,
+            detail="Another chapter is being processed. Please try again shortly.",
+        )
+    try:
+        return extractor(uploads, *args)
+    finally:
+        extraction_lock.release()
 
 @app.post("/v2/feedback")
 def post_feedback(data: dict):
