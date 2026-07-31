@@ -33,15 +33,26 @@ The repository includes:
 - `DATA_DIR=/data`.
 
 There is no `railway.toml`, `railway.json`, Procfile, CI deployment workflow, or
-production domain/service identifier in the repository. The Railway project
-dashboard is recorded above, but the health check, region, replicas, volume,
-environment variables, public domain, and billing controls must still be
-confirmed there.
+production domain/service identifier in the repository.
 
-Comic uploads are sent directly from the browser to the Railway API. Confirm
-that Railway's request-size and request-duration limits accommodate
-`MAX_UPLOAD_BYTES`, and mount a persistent volume at `/data`; otherwise
-normalized uploaded pages and cached extraction results disappear on restart.
+The production service configuration was verified through the Railway CLI on
+2026-07-31:
+
+- project `onepanel`, production environment;
+- service `Manga-Panel-Extractor`, Hobby plan, one `us-west2` replica;
+- Railway domain
+  `manga-panel-extractor-production.up.railway.app`;
+- Dockerfile build from the `master` branch;
+- persistent volume `manga-panel-extractor-volume`, mounted at `/data`, ready,
+  with 500 MB capacity and approximately 77 MB used at verification time.
+
+Comic uploads are sent directly from the browser to the Railway API. Railway
+documents a maximum HTTP request duration of 15 minutes, while the frontend
+times uploads out after 10 minutes. Railway does not publish a maximum HTTP
+request-body size, so the configured 250 MB upload ceiling should be monitored
+with real uploads. The current 500 MB volume is smaller than the 750 MB expanded
+input ceiling; live-resize it to the Hobby plan's current 5 GB default before
+relying on uploaded-page retention at scale.
 
 ## Expected service configuration
 
