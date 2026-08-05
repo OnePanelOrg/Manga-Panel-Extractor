@@ -65,7 +65,7 @@ contain user-provided or sensitive text.
 | Symptom | Likely cause |
 | --- | --- |
 | Service does not become healthy | Start command does not bind to `$PORT`, dependency/build failure, or application import failure |
-| Chapter returns HTTP 422 with no supported images | Source images do not match the supported `https://i*.png`/`https://i*.webp` pattern, site HTML changed, or lazy-loaded images use another attribute |
+| Chapter returns HTTP 422 with no supported images | OP images do not match the supported `https://i*` PNG/WebP pattern, TCB reader markup or CDN paths changed, or lazy-loaded images use another attribute |
 | Request fails after a restart | Local cache was ephemeral |
 | `GET /v2/chapter/{hash}` returns 404 | Hash was never generated on this instance, cache was lost, or another replica owns it |
 | Chapter or billing request returns 401 | Clerk token is missing, expired, has the wrong issuer, or has an unauthorized `azp` |

@@ -156,10 +156,13 @@ API modes. LLM results are cached by image hash and model under
 
 ## Current source compatibility
 
-The downloader accepts `.png` and `.webp` image `src` values whose absolute URL
-begins with `https://i`. URL query strings and uppercase extensions are
-supported. Sites using lazy-loading attributes, relative URLs, different host
-patterns, or other image formats still require an adapter.
+Chapter URLs must use HTTPS and come from `opchapters.com` or
+`tcbonepiecechapters.com` (with or without `www`). OP Chapters pages accept
+`.png` and `.webp` image sources whose absolute URL begins with `https://i`.
+TCB chapter pages use their ordered `fixed-ratio-content` reader images from
+`cdn.onepiecechapters.com`, with `.jpg`, `.jpeg`, `.png`, and `.webp` supported.
+URL query strings and uppercase extensions are supported. Other sites and
+lazy-loading attributes still require an adapter.
 
 An extraction that finds zero usable pages returns HTTP 422 and is not cached.
 

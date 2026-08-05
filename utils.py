@@ -11,15 +11,47 @@ import requests
 from bs4 import BeautifulSoup
 from skimage import io
 
-SUPPORTED_IMAGE_EXTENSIONS = {".png", ".webp"}
+OP_CHAPTER_HOSTS = {"opchapters.com", "www.opchapters.com"}
+TCB_CHAPTER_HOSTS = {
+    "tcbonepiecechapters.com",
+    "www.tcbonepiecechapters.com",
+}
+SUPPORTED_CHAPTER_HOSTS = OP_CHAPTER_HOSTS | TCB_CHAPTER_HOSTS
+OP_IMAGE_EXTENSIONS = {".png", ".webp"}
+TCB_IMAGE_HOSTS = {"cdn.onepiecechapters.com"}
+TCB_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp"}
 
 
 def name_requirements(src):
-    if not isinstance(src, str) or not src.startswith("https://i"):
+    if not isinstance(src, str):
         return False
 
-    extension = os.path.splitext(urlparse(src).path)[1].lower()
-    return extension in SUPPORTED_IMAGE_EXTENSIONS
+    parsed = urlparse(src)
+    if parsed.scheme != "https" or not parsed.hostname:
+        return False
+    extension = os.path.splitext(parsed.path)[1].lower()
+    if parsed.hostname.startswith("i"):
+        return extension in OP_IMAGE_EXTENSIONS
+    return (
+        parsed.hostname in TCB_IMAGE_HOSTS
+        and extension in TCB_IMAGE_EXTENSIONS
+    )
+
+
+def extract_chapter_image_urls(html, chapter_host):
+    soup = BeautifulSoup(html, "html.parser")
+    image_tags = soup.find_all("img")
+    if chapter_host in TCB_CHAPTER_HOSTS:
+        image_tags = [
+            image
+            for image in image_tags
+            if "fixed-ratio-content" in image.get("class", [])
+        ]
+    return [
+        image["src"]
+        for image in image_tags
+        if image.get("src") and name_requirements(image["src"])
+    ]
 
 REQUEST_TIMEOUT = (10, 60)
 MAX_IMAGE_BYTES = 25 * 1024 * 1024
@@ -31,19 +63,10 @@ def download_lmages(url, folder):
     response = requests.get(url, timeout=REQUEST_TIMEOUT)
     response.raise_for_status()
     final_host = urlparse(response.url).hostname
-    if final_host not in {"opchapters.com", "www.opchapters.com"}:
+    if final_host not in SUPPORTED_CHAPTER_HOSTS:
         raise ValueError("Chapter URL redirected to an unsupported host")
 
-    # Parse the HTML content using BeautifulSoup
-    soup = BeautifulSoup(response.content, "html.parser")
-    
-    # Find all the unage tags and extract the image URLS
-    img_tags = soup.find_all("img")
-    img_urls = [
-        img["src"]
-        for img in img_tags
-        if img.get("src") and name_requirements(img["src"])
-    ]
+    img_urls = extract_chapter_image_urls(response.content, final_host)
     if not img_urls:
         raise ValueError("No supported chapter images were found")
     if len(img_urls) > MAX_CHAPTER_IMAGES:

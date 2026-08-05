@@ -217,14 +217,23 @@ class ChapterProcessingTest(unittest.TestCase):
         self.assertEqual(raised.exception.status_code, 404)
 
     def test_chapter_url_validation_accepts_supported_https_host(self):
-        source_url = "https://www.opchapters.com/chapter/1?date=latest"
-
-        self.assertEqual(app.validate_chapter_url(source_url), source_url)
+        for source_url in (
+            "https://www.opchapters.com/chapter/1?date=latest",
+            (
+                "https://tcbonepiecechapters.com/chapters/7996/"
+                "one-piece-chapter-1189"
+            ),
+            "https://www.tcbonepiecechapters.com/chapters/7995/chapter",
+        ):
+            with self.subTest(source_url=source_url):
+                self.assertEqual(app.validate_chapter_url(source_url), source_url)
 
     def test_chapter_url_validation_rejects_other_origins(self):
         for source_url in (
             "http://opchapters.com/chapter/1",
+            "http://tcbonepiecechapters.com/chapters/7996/chapter",
             "https://opchapters.com.attacker.example/chapter/1",
+            "https://tcbonepiecechapters.com.attacker.example/chapters/1",
             "https://example.com/chapter/1",
         ):
             with self.subTest(source_url=source_url):
