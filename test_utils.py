@@ -2,7 +2,7 @@ import os
 import tempfile
 import unittest
 
-from utils import list_files, name_requirements
+from utils import extract_chapter_image_urls, list_files, name_requirements
 from kumikolib import Kumiko, natural_sort_key, page_sort_key
 
 
@@ -19,6 +19,41 @@ class ImageSourceTests(unittest.TestCase):
         self.assertFalse(name_requirements("/chapter/page.webp"))
         self.assertFalse(name_requirements("https://cdn.example/chapter/page.webp"))
         self.assertFalse(name_requirements("https://i.example/chapter/page.jpg"))
+
+    def test_accepts_tcb_chapter_image_cdn(self):
+        self.assertTrue(
+            name_requirements(
+                "https://cdn.onepiecechapters.com/file/CDN-M-A-N/page.png"
+            )
+        )
+        self.assertTrue(
+            name_requirements(
+                "https://cdn.onepiecechapters.com/file/CDN-M-A-N/page.jpeg"
+            )
+        )
+        self.assertFalse(
+            name_requirements(
+                "https://cdn.onepiecechapters.com.attacker.example/page.png"
+            )
+        )
+
+    def test_extracts_only_ordered_reader_images_from_tcb_chapter(self):
+        html = b"""
+            <img src="/files/h-logo.png">
+            <img class="fixed-ratio-content"
+                 src="https://cdn.onepiecechapters.com/file/page-01.png">
+            <img class="fixed-ratio-content other"
+                 src="https://cdn.onepiecechapters.com/file/page-02.jpg">
+            <img src="https://cdn.onepiecechapters.com/file/thumbnail.png">
+        """
+
+        self.assertEqual(
+            extract_chapter_image_urls(html, "tcbonepiecechapters.com"),
+            [
+                "https://cdn.onepiecechapters.com/file/page-01.png",
+                "https://cdn.onepiecechapters.com/file/page-02.jpg",
+            ],
+        )
 
     def test_scanner_includes_webp(self):
         with tempfile.TemporaryDirectory() as directory:

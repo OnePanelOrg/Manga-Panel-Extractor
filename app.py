@@ -126,10 +126,15 @@ def validate_chapter_url(chapter_url: str) -> str:
     if parsed.scheme != "https" or parsed.hostname not in {
         "opchapters.com",
         "www.opchapters.com",
+        "tcbonepiecechapters.com",
+        "www.tcbonepiecechapters.com",
     }:
         raise HTTPException(
             status_code=400,
-            detail="Only HTTPS URLs from opchapters.com are supported",
+            detail=(
+                "Only HTTPS URLs from opchapters.com and "
+                "tcbonepiecechapters.com are supported"
+            ),
         )
     return chapter_url
 

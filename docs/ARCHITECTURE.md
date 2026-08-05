@@ -13,7 +13,7 @@ FastAPI (app.py)
   |
   +-- utils.download_lmages()
   |     +-- fetch chapter HTML
-  |     +-- select matching PNG/WebP <img> sources
+  |     +-- select matching OP Chapters or TCB reader images in page order
   |     `-- write images/<hash>/ and img_dict.json
   |
   +-- ingestion.ingest_uploads()
