@@ -16,6 +16,7 @@ class BillingServiceTest(unittest.TestCase):
                 "STRIPE_SECRET_KEY": "sk_test_example",
                 "STRIPE_PRICE_ID": "price_monthly",
                 "FRONTEND_URL": "http://localhost:3000",
+                "CLERK_SECRET_KEY": "",
             },
             clear=False,
         )
@@ -23,6 +24,73 @@ class BillingServiceTest(unittest.TestCase):
 
     def tearDown(self):
         self.environment.stop()
+        billing_service._get_clerk_user.cache_clear()
+
+    @patch.dict(os.environ, {"CLERK_SECRET_KEY": "sk_test_clerk"})
+    @patch("billing_service._get_clerk_user")
+    def test_verified_allowlisted_primary_email_gets_complimentary_access(
+        self,
+        get_clerk_user,
+    ):
+        get_clerk_user.return_value = {
+            "primary_email_address_id": "email_primary",
+            "email_addresses": [
+                {
+                    "id": "email_primary",
+                    "email_address": "VincenzoCassaro1@gmail.com",
+                    "verification": {"status": "verified"},
+                },
+            ],
+        }
+
+        self.assertTrue(billing_service.has_complimentary_access("user_owner"))
+
+    @patch.dict(os.environ, {"CLERK_SECRET_KEY": "sk_test_clerk"})
+    @patch("billing_service._get_clerk_user")
+    def test_unverified_allowlisted_email_does_not_get_access(self, get_clerk_user):
+        get_clerk_user.return_value = {
+            "primary_email_address_id": "email_primary",
+            "email_addresses": [
+                {
+                    "id": "email_primary",
+                    "email_address": "vincenzocassaro1@gmail.com",
+                    "verification": {"status": "unverified"},
+                },
+            ],
+        }
+
+        self.assertFalse(billing_service.has_complimentary_access("user_owner"))
+
+    @patch.dict(os.environ, {"CLERK_SECRET_KEY": "sk_test_clerk"})
+    @patch("billing_service._get_clerk_user")
+    def test_verified_email_outside_allowlist_does_not_get_access(
+        self,
+        get_clerk_user,
+    ):
+        get_clerk_user.return_value = {
+            "primary_email_address_id": "email_primary",
+            "email_addresses": [
+                {
+                    "id": "email_primary",
+                    "email_address": "reader@example.com",
+                    "verification": {"status": "verified"},
+                },
+            ],
+        }
+
+        self.assertFalse(billing_service.has_complimentary_access("user_reader"))
+
+    @patch("billing_service.find_customer")
+    @patch("billing_service.has_complimentary_access", return_value=True)
+    def test_complimentary_access_skips_stripe(self, _complimentary, find_customer):
+        state = billing_service.get_subscription_state("user_owner")
+
+        self.assertTrue(state.active)
+        self.assertEqual(
+            state.status,
+            billing_service.COMPLIMENTARY_SUBSCRIPTION_STATUS,
+        )
+        find_customer.assert_not_called()
 
     @patch("billing_service.stripe.Price.retrieve")
     def test_accepts_exact_monthly_price(self, retrieve):

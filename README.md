@@ -107,14 +107,16 @@ Configure:
 CLERK_ISSUER
 CLERK_JWKS_URL
 CLERK_AUTHORIZED_PARTIES=http://localhost:3000,https://reader.onepanel.app
+CLERK_SECRET_KEY
 STRIPE_SECRET_KEY
 STRIPE_PRICE_ID
 FRONTEND_URL=https://reader.onepanel.app
 ```
 
 `STRIPE_PRICE_ID` must reference an active recurring Price for exactly €4.99 EUR
-per month. Checkout does not configure a free trial. Subscription access is
-checked directly against Stripe, making Stripe the source of truth.
+per month. Checkout does not configure a free trial. Paid access is checked
+against Stripe. Accounts whose verified primary email appears in the server-side
+`COMPLIMENTARY_PRO_EMAILS` list receive Pro access without a Stripe subscription.
 
 `POST /v2/feedback` requires database variables:
 

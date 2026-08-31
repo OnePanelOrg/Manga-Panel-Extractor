@@ -1,13 +1,20 @@
 import os
 from dataclasses import dataclass
+from functools import lru_cache
 from typing import Optional
+from urllib.parse import quote
 
+import requests
 import stripe
 from fastapi import HTTPException
 
 
 ACTIVE_SUBSCRIPTION_STATUSES = {"active"}
+COMPLIMENTARY_SUBSCRIPTION_STATUS = "complimentary"
+COMPLIMENTARY_PRO_EMAILS = frozenset({"vincenzocassaro1@gmail.com"})
 SUBSCRIPTION_REQUIRED = "subscription_required"
+CLERK_API_URL = "https://api.clerk.com/v1"
+CLERK_REQUEST_TIMEOUT = 5
 
 
 @dataclass(frozen=True)
@@ -31,6 +38,46 @@ def _stripe_error(error: Exception) -> HTTPException:
     return HTTPException(
         status_code=502,
         detail="Stripe billing is temporarily unavailable. Please try again.",
+    )
+
+
+@lru_cache(maxsize=1024)
+def _get_clerk_user(clerk_user_id: str) -> dict:
+    response = requests.get(
+        f"{CLERK_API_URL}/users/{quote(clerk_user_id, safe='')}",
+        headers={"Authorization": f"Bearer {_required_env('CLERK_SECRET_KEY')}"},
+        timeout=CLERK_REQUEST_TIMEOUT,
+    )
+    response.raise_for_status()
+    return response.json()
+
+
+def has_complimentary_access(clerk_user_id: str) -> bool:
+    if not COMPLIMENTARY_PRO_EMAILS or not os.environ.get("CLERK_SECRET_KEY", "").strip():
+        return False
+
+    try:
+        user = _get_clerk_user(clerk_user_id)
+    except (requests.RequestException, RuntimeError, ValueError):
+        return False
+
+    primary_email_id = user.get("primary_email_address_id")
+    primary_email = next(
+        (
+            email
+            for email in user.get("email_addresses", [])
+            if email.get("id") == primary_email_id
+        ),
+        None,
+    )
+    if not primary_email:
+        return False
+
+    verification = primary_email.get("verification") or {}
+    email_address = str(primary_email.get("email_address", "")).strip().casefold()
+    return (
+        verification.get("status") == "verified"
+        and email_address in COMPLIMENTARY_PRO_EMAILS
     )
 
 
@@ -66,6 +113,12 @@ def get_or_create_customer(clerk_user_id: str):
 
 
 def get_subscription_state(clerk_user_id: str) -> SubscriptionState:
+    if has_complimentary_access(clerk_user_id):
+        return SubscriptionState(
+            active=True,
+            status=COMPLIMENTARY_SUBSCRIPTION_STATUS,
+        )
+
     customer = find_customer(clerk_user_id)
     if not customer:
         return SubscriptionState(active=False, status=None)

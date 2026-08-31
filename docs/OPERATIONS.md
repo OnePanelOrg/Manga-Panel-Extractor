@@ -69,7 +69,7 @@ contain user-provided or sensitive text.
 | Request fails after a restart | Local cache was ephemeral |
 | `GET /v2/chapter/{hash}` returns 404 | Hash was never generated on this instance, cache was lost, or another replica owns it |
 | Chapter or billing request returns 401 | Clerk token is missing, expired, has the wrong issuer, or has an unauthorized `azp` |
-| Chapter request returns 402 | The authenticated user has no active Stripe subscription |
+| Chapter request returns 402 | The authenticated user has no active Stripe subscription or complimentary access |
 | Checkout returns 503 | `STRIPE_PRICE_ID` is not an active €4.99 EUR monthly recurring Price |
 | Chapter request is slow or times out | Downloads and CPU-heavy image processing run synchronously |
 | Feedback request returns 500 with `DatabaseConnectionError` in the service logs | Missing/invalid MySQL variables or database unavailable |
